@@ -155,10 +155,12 @@ form.f label { display: flex; flex-direction: column; gap: 4px; font-size: .82re
         <span class="eyebrow">Site</span>
         <select id="siteSel" style="width:auto"></select>
       </label>
+      <button id="installeer" type="button" hidden>Installeer als app</button>
       <div id="who" class="who" hidden><span id="who-mail"></span><button id="logout" type="button">Afmelden</button></div>
     </div>
   </header>
   <div id="banner" class="banner" hidden></div>
+  <div id="ios-tip" class="banner" hidden>Installeren op iPhone: tik in Safari op <strong>Deel</strong> en kies <strong>Zet op beginscherm</strong>. <button id="ios-tip-weg" type="button" class="ghost">Sluiten</button></div>
   <div class="layout">
     <nav class="afd" id="nav" aria-label="Afdelingen"></nav>
     <main id="main">
@@ -633,6 +635,24 @@ render();
   document.addEventListener("visibilitychange", () => { if (!document.hidden && sessie) laadAlles(); });
 })();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// Eigen installatieknop (Chrome/Edge/Samsung Internet): verschijnt zodra de browser de app installeerbaar vindt.
+let installVraag = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installVraag = e; $("#installeer").hidden = false; });
+window.addEventListener("appinstalled", () => { installVraag = null; $("#installeer").hidden = true; toast("App geïnstalleerd"); });
+$("#installeer").addEventListener("click", async () => {
+  if (!installVraag) return;
+  installVraag.prompt();
+  await installVraag.userChoice.catch(() => {});
+  installVraag = null; $("#installeer").hidden = true;
+});
+// iPhone en iPad kennen geen installatieknop: toon één keer hoe het via Safari moet.
+(() => {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  let gezien = false; try { gezien = localStorage.getItem("voedselverspilling-ios-tip") === "1"; } catch (e) {}
+  if (ios && !standalone && !gezien) $("#ios-tip").hidden = false;
+  $("#ios-tip-weg").onclick = () => { $("#ios-tip").hidden = true; try { localStorage.setItem("voedselverspilling-ios-tip", "1"); } catch (e) {} };
+})();
 </script>
 </body>
 </html>
