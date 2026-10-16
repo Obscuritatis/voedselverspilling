@@ -16,7 +16,7 @@ Met *Excel-verslag* (op het overzicht van een site of op een afdeling) download 
 periode: een overzichtsblad per afdeling, verdeling per soort verlies en component, en aparte bladen met alle
 metingen, gevoeligheden en acties. Onder *Beheer* kan je na een test alle gegevens van een site wissen.
 
-Eerste site: WZC-Huize Nazareth, met de woonafdelingen Heilig Hart, Sint-Jozef, Sint-Elisabeth en
+Eerste site: WZC-Huize Nazareth, met de woonafdelingen Heilig Hart, Sint-Jozef verdiep 2 en 3, Sint-Elisabeth verdiep 1 en 2 en
 Sint-Franciscus, restaurant Gozewijn (medewerkers) en het Prieeltje (buurtrestaurant).
 Andere sites en afdelingen voeg je toe in de app onder *Beheer*. De vertrekpunten voor gevoeligheden en acties
 staan bovenaan in [`index.html`](index.html) (`SUG_GEV`, `SUG_ACT`).

@@ -526,8 +526,8 @@ function beheerHtml() {
       </form>
     </section>
   </div>
-  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3>
-    ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><p><b>${esc(a.naam)}</b> <span class="hint">· ${esc(a.type)}</span></p>
+  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde of omschrijving aan; het wordt bewaard zodra je het veld verlaat.</p>
+    ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-naam="${esc(a.id)}" value="${esc(a.naam)}" aria-label="Naam ${esc(a.naam)}"${dis()} style="flex:1 1 12rem;font-weight:700"><input type="number" data-volg="${esc(a.id)}" value="${esc(a.volgorde ?? "")}" aria-label="Volgorde ${esc(a.naam)}" title="Volgorde"${dis()} style="width:5rem"><span class="hint">${esc(a.type)}</span></div>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
     <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
@@ -569,6 +569,8 @@ function bindBeheer() {
     }, "Gegevens gewist");
     if (ok) $("#wBev").value = "";
   };
+  document.querySelectorAll("[data-naam]").forEach((inp) => (inp.onchange = () => { const v = inp.value.trim(); if (!v) { toast("Een afdeling heeft een naam nodig."); return; } write(() => sb.from("vv_afdelingen").update({ naam: v }).eq("id", inp.dataset.naam), "Naam bewaard"); }));
+  document.querySelectorAll("[data-volg]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ volgorde: Number(inp.value) || 0 }).eq("id", inp.dataset.volg), "Volgorde bewaard")));
   document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
   bindDeletes(document);
 }

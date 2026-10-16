@@ -113,9 +113,17 @@ insert into public.vv_sites (id, naam, volgorde) values
 on conflict (id) do nothing;
 insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, omschrijving) values
   ('wzc-huize-nazareth-heilig-hart', 'wzc-huize-nazareth', 'Heilig Hart', 'woonafdeling', 1, ''),
-  ('wzc-huize-nazareth-sint-jozef', 'wzc-huize-nazareth', 'Sint-Jozef', 'woonafdeling', 2, ''),
-  ('wzc-huize-nazareth-sint-elisabeth', 'wzc-huize-nazareth', 'Sint-Elisabeth', 'woonafdeling', 3, ''),
-  ('wzc-huize-nazareth-sint-franciscus', 'wzc-huize-nazareth', 'Sint-Franciscus', 'woonafdeling', 4, ''),
-  ('wzc-huize-nazareth-gozewijn', 'wzc-huize-nazareth', 'Restaurant Gozewijn', 'restaurant', 5, 'Restaurant voor medewerkers'),
-  ('wzc-huize-nazareth-prieeltje', 'wzc-huize-nazareth', 'Het Prieeltje', 'restaurant', 6, 'Buurtrestaurant')
+  ('wzc-huize-nazareth-sint-jozef', 'wzc-huize-nazareth', 'Sint-Jozef verdiep 2', 'woonafdeling', 2, ''),
+  ('wzc-huize-nazareth-sint-jozef-3', 'wzc-huize-nazareth', 'Sint-Jozef verdiep 3', 'woonafdeling', 3, ''),
+  ('wzc-huize-nazareth-sint-elisabeth', 'wzc-huize-nazareth', 'Sint-Elisabeth verdiep 1', 'woonafdeling', 4, ''),
+  ('wzc-huize-nazareth-sint-elisabeth-2', 'wzc-huize-nazareth', 'Sint-Elisabeth verdiep 2', 'woonafdeling', 5, ''),
+  ('wzc-huize-nazareth-sint-franciscus', 'wzc-huize-nazareth', 'Sint-Franciscus', 'woonafdeling', 6, ''),
+  ('wzc-huize-nazareth-gozewijn', 'wzc-huize-nazareth', 'Restaurant Gozewijn', 'restaurant', 7, 'Restaurant voor medewerkers'),
+  ('wzc-huize-nazareth-prieeltje', 'wzc-huize-nazareth', 'Het Prieeltje', 'restaurant', 8, 'Buurtrestaurant')
 on conflict (id) do nothing;
+
+-- Update 16/10/2026: Sint-Jozef en Sint-Elisabeth zijn per verdiep opgesplitst. Bestaande metingen van
+-- "Sint-Jozef" horen voortaan bij verdiep 2 en die van "Sint-Elisabeth" bij verdiep 1.
+update public.vv_afdelingen set naam = 'Sint-Jozef verdiep 2' where id = 'wzc-huize-nazareth-sint-jozef' and naam = 'Sint-Jozef';
+update public.vv_afdelingen set naam = 'Sint-Elisabeth verdiep 1' where id = 'wzc-huize-nazareth-sint-elisabeth' and naam = 'Sint-Elisabeth';
+-- De volgorde van bestaande afdelingen pas je aan in de app (Beheer) of met supabase/2026-10-16-verdiepen.sql.
