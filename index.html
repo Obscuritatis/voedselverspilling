@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Voedselverspilling</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icoon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icoon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/icoon-180.png">
+<meta name="theme-color" content="#2f6b4f">
+<meta name="apple-mobile-web-app-title" content="Verspilling">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sitebalk bovenaan, afdelingslijst links (chips op gsm), werkvlak rechts. Zelfde basis als de veiligheidsrondes en staalnamen. */
+:root {
+  --bg: #f5f6f4;
+  --surface: #ffffff;
+  --ink: #1d2a23;
+  --muted: #5d6b62;
+  --line: #dde3dc;
+  --accent: #2f6b55;
+  --accent-soft: #e2efe8;
+  --ochre: #a8741f;
+  --ochre-soft: #f6ecd8;
+  --red: #b23b2e;
+  --red-soft: #f7e3df;
+  --blue: #3b6390;
+  --blue-soft: #e3ebf4;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141a17; --surface: #1c2420; --ink: #e6ece7; --muted: #9aa89f; --line: #2e3a33;
+  --accent: #6fbf9c; --accent-soft: #21362c; --ochre: #e0ad5a; --ochre-soft: #3a2f1c;
+  --red: #ef8a7d; --red-soft: #3d2420; --blue: #8fb3dc; --blue-soft: #1f2c3b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141a17; --surface: #1c2420; --ink: #e6ece7; --muted: #9aa89f; --line: #2e3a33;
+  --accent: #6fbf9c; --accent-soft: #21362c; --ochre: #e0ad5a; --ochre-soft: #3a2f1c;
+  --red: #ef8a7d; --red-soft: #3d2420; --blue: #8fb3dc; --blue-soft: #1f2c3b; color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5 }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15 }
+h1 { font-size: 2.2rem; font-weight: 700; text-transform: uppercase }
+h2 { letter-spacing: .01em }
+h2 { font-size: 1.6rem; font-weight: 700 }
+h3 { font-size: 1.25rem; font-weight: 700 }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px)) }
+.sign { width: 40px; height: 40px; flex: none; border-radius: 4px; background: var(--accent); display: grid; place-items: center }
+.sign svg { width: 26px; height: 26px }
+.who { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--muted); min-width: 0; overflow-wrap: anywhere }
+.banner { padding: 10px 14px; border-radius: 6px; background: var(--ochre-soft); color: var(--ochre); font-size: .9rem; margin-bottom: 16px }
+.login { max-width: 420px; display: grid; gap: 12px }
+.login label { display: grid; gap: 4px; font-size: .82rem; color: var(--muted) }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px }
+.brand { display: flex; align-items: center; gap: 14px }
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; min-width: 0 }
+.eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; color: var(--muted); font-weight: 700 }
+select, input, textarea, button { font: inherit; color: inherit }
+select, input, textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0 }
+textarea { resize: vertical; min-height: 60px }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button { cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); padding: 7px 12px }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700 }
+button.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 4px 8px }
+button.ghost:hover { color: var(--red) }
+button:disabled { opacity: .5; cursor: not-allowed }
+.layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start }
+nav.afd { display: flex; flex-direction: column; gap: 4px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px) }
+nav.afd button { text-align: left; border: 0; background: transparent; padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; align-items: center }
+nav.afd button[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 700 }
+nav.afd button:hover:not([aria-current="true"]) { background: var(--surface) }
+nav.afd .grp { margin: 12px 10px 2px }
+nav.afd .count { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr) }
+  nav.afd { position: static; flex-direction: row; overflow-x: auto; padding-bottom: 4px }
+  nav.afd .grp { display: none }
+  nav.afd button { white-space: nowrap; border: 1px solid var(--line); background: var(--surface) }
+  nav.afd .count { display: none }
+}
+main { min-width: 0; display: flex; flex-direction: column; gap: 24px }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px }
+@media (max-width: 700px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+.stat { padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line) }
+.stat b { display: block; font-family: var(--font-display); font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1.1 }
+.stat span { color: var(--muted); font-size: .85rem }
+.row-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.seg button { border: 0; border-radius: 0; padding: 5px 10px; font-size: .85rem }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg) }
+.tablewrap { overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-size: .92rem }
+th { text-align: left; font-weight: 700; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; border-bottom: 1px solid var(--line) }
+td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle }
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap }
+tr.click { cursor: pointer }
+tr.click:hover td { background: var(--accent-soft) }
+.bar { height: 8px; background: var(--accent-soft); border-radius: 4px; overflow: hidden; min-width: 60px }
+.bar i { display: block; height: 100%; background: var(--accent) }
+.bars { display: flex; flex-direction: column; gap: 10px }
+.bars .b { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) 4.5rem; gap: 10px; align-items: center; font-size: .9rem }
+.bars .b .num { text-align: right; font-variant-numeric: tabular-nums }
+.pill { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap }
+.p-hoog { background: var(--red-soft); color: var(--red) }
+.p-midden { background: var(--ochre-soft); color: var(--ochre) }
+.p-laag { background: var(--blue-soft); color: var(--blue) }
+.p-ok { background: var(--accent-soft); color: var(--accent) }
+.p-mute { background: var(--bg); color: var(--muted); border: 1px solid var(--line) }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr) } }
+form.f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: end }
+form.f .full { grid-column: 1 / -1 }
+form.f label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; color: var(--muted); min-width: 0 }
+@media (max-width: 480px) { form.f { grid-template-columns: minmax(0, 1fr) } }
+.list { display: flex; flex-direction: column }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--line) }
+.item:last-child { border-bottom: 0 }
+.item .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .82rem; color: var(--muted) }
+.item p { margin: 0 }
+.item .side { display: flex; gap: 6px; align-items: start }
+.item .side select { width: auto; padding: 3px 6px; font-size: .82rem }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chips button { font-size: .8rem; padding: 4px 9px; border-radius: 99px; background: var(--bg); text-align: left }
+.chips button:hover { border-color: var(--accent); color: var(--accent) }
+.hint { color: var(--muted); font-size: .88rem; margin: 0 }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto }
+.tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 8px 12px; white-space: nowrap }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 700 }
+.empty { padding: 20px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px }
+.focus { font-size: .85rem }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: .9rem; z-index: 10 }
+.matrix { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
+.matrix > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-width: 0 }
+.matrix h4 { margin: 0 0 6px; font-size: .82rem; font-family: var(--font-body) }
+.matrix ul { margin: 0; padding-left: 18px; font-size: .88rem }
+@media (prefers-reduced-motion: no-preference) { tr.click td, nav.afd button { transition: background .15s } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="sign" aria-hidden="true"><svg viewBox="0 0 512 512" fill="none" stroke="#fff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"><path d="M96 236h320a160 160 0 0 1-320 0Z"/><path d="M256 236c0-62 34-104 96-120-2 62-34 104-96 120Z" fill="#fff"/><path d="M256 236c-10-40-34-66-78-74"/></svg></div>
+      <div><div class="eyebrow">Registratie</div><h1>Voedselverspilling</h1></div>
+    </div>
+    <div class="tools">
+      <label id="siteWrap" style="display:flex;gap:8px;align-items:center;min-width:0" hidden>
+        <span class="eyebrow">Site</span>
+        <select id="siteSel" style="width:auto"></select>
+      </label>
+      <div id="who" class="who" hidden><span id="who-mail"></span><button id="logout" type="button">Afmelden</button></div>
+    </div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <div class="layout">
+    <nav class="afd" id="nav" aria-label="Afdelingen"></nav>
+    <main id="main">
+      <div class="empty">Laden…</div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const STROMEN = {
+  bordrest: "Bordresten",
+  overproductie: "Overproductie (niet uitgeserveerd)",
+  bederf: "Bederf of vervallen voorraad",
+  bereiding: "Bereidingsverlies",
+};
+const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
+const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Tussendoortje", "Hele dag"];
+const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
+const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
+const NIVEAU = ["laag", "midden", "hoog"];
+
+// Vertrekpunten, geen geregistreerde gegevens: klik om een formulier voor te vullen.
+const SUG_GEV = {
+  woonafdeling: [
+    ["Textuur en slikken (IDDSI)", "Veel bewoners krijgen gemalen of gemixte maaltijden; overschotten daarvan zijn niet herbruikbaar."],
+    ["Eetlust en gezondheid", "Wisselende eetlust door ziekte, medicatie of palliatieve zorg; porties blijven vaak half op."],
+    ["Smaak en gewoontes", "Bewoners met dementie herkennen gemixte gerechten minder goed, waardoor ze minder eten."],
+    ["Porties en bestelling", "Bestelling bij de centrale keuken volgt vaste aantallen, niet de actuele bezetting (ziekenhuisopname, afwezigheid, overlijden)."],
+    ["Timing en organisatie", "Maaltijden staan lang warm tot iedereen geholpen is; kwaliteit en appetijt dalen."],
+    ["Personeel en communicatie", "Dieetwijzigingen of afwezigheden komen niet altijd tijdig bij de keuken terecht."],
+    ["Voedselveiligheid en regels", "Uitgeserveerd voedsel mag niet opnieuw aangeboden worden (HACCP, FAVV)."],
+  ],
+  restaurant: [
+    ["Bezoekers en vraag", "Het aantal eters schommelt sterk per dag (diensten, vakanties, weer, activiteiten)."],
+    ["Porties en bestelling", "Eén vaste portiegrootte past niet bij elke gast."],
+    ["Bezoekers en vraag", "Gasten verwachten keuze tot sluitingstijd, wat aan het einde van de service tot overschot leidt."],
+    ["Voedselveiligheid en regels", "Warm buffet: resten na de service mogen niet terug in de koeling."],
+    ["Smaak en gewoontes", "Bepaalde componenten (groenten, saus) komen telkens terug op de borden."],
+  ],
+};
+const SUG_ACT = [
+  ["Bestelling dagelijks afstemmen op de bezetting", "Afwezigheden en dieetwijzigingen vóór 10 uur doorgeven aan de keuken.", "hoog", "laag"],
+  ["Kleinere basisportie met bijschep", "Standaard een kleinere portie opscheppen en actief een tweede portie aanbieden.", "hoog", "laag"],
+  ["Gemixt herkenbaar aanbieden", "Componenten apart en in vorm presenteren zodat bewoners het gerecht herkennen.", "midden", "midden"],
+  ["Wekelijks bordresten wegen", "Vaste weegmoment per week en de resultaten bespreken met keuken en team.", "midden", "laag"],
+  ["Voorkeuren per bewoner vastleggen", "Smaak, portiegrootte en gewoontes noteren in het zorgdossier of op de maaltijdkaart.", "midden", "midden"],
+  ["Inschrijven of reserveren op drukke dagen", "Gasten vragen zich vooraf aan te melden zodat de keuken juister kan plannen.", "hoog", "midden"],
+  ["Restaanbod aan het einde van de service", "Overschot aan een lagere prijs aanbieden of via een sociale partner verdelen.", "midden", "midden"],
+  ["Overschot verwerken in een volgende maaltijd", "Niet-uitgeserveerde componenten binnen de HACCP-regels verwerken in soep of dagschotel.", "midden", "laag"],
+];
+
+const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: [], loaded: {} };
+let sb = null, sessie = null, ready = false, canWrite = true;
+const ui = { site: null, view: "overzicht", tab: "metingen", periode: 30, prefillAct: null };
+try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode) ui.periode = s.periode; } catch (e) {}
+function saveUi() { try { localStorage.setItem("voedselverspilling-ui", JSON.stringify({ site: ui.site, periode: ui.periode })); } catch (e) {} }
+
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const kg = (n) => (Math.round(n * 10) / 10).toLocaleString("nl-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " kg";
+const today = () => new Date().toISOString().slice(0, 10);
+const fmtDate = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString("nl-BE", { day: "numeric", month: "short" }); } catch (e) { return d; } };
+const slug = (t) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "x";
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2400); }
+
+async function write(fn, okMsg) {
+  try {
+    const { error } = await fn();
+    if (error) throw error;
+    if (okMsg) toast(okMsg);
+    laadAlles();
+    return true;
+  } catch (e) {
+    console.error(e);
+    toast(e && (e.code === "42501" || /row-level security/i.test(e.message || "")) ? "Je hebt geen toegang om dit op te slaan."
+      : e && e.code === "23503" ? "Dit kan niet: er hangen nog gegevens aan vast."
+      : e && e.code === "23505" ? "Dit bestaat al."
+      : "Opslaan mislukt. Controleer je verbinding en probeer opnieuw.");
+    return false;
+  }
+}
+
+// ---------- afgeleide cijfers ----------
+function inPeriode(m) {
+  if (!ui.periode) return true;
+  const grens = new Date(); grens.setDate(grens.getDate() - ui.periode);
+  return m.datum >= grens.toISOString().slice(0, 10);
+}
+const siteAfd = () => S.afdelingen.filter((a) => a.siteId === ui.site).sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99) || a.naam.localeCompare(b.naam));
+const ofAfd = (list, id) => list.filter((x) => x.afdelingId === id);
+const sum = (arr) => arr.reduce((s, m) => s + (Number(m.kg) || 0), 0);
+function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[key]] || 0) + (Number(m.kg) || 0))); return Object.entries(g).sort((a, b) => b[1] - a[1]); }
+
+function focusFor(a) {
+  const ms = ofAfd(S.metingen, a.id).filter(inPeriode);
+  const gev = ofAfd(S.gevoeligheden, a.id);
+  const act = ofAfd(S.acties, a.id);
+  const zonder = gev.filter((g) => g.impact === "hoog" && !act.some((x) => x.gevoeligheidId === g.id && x.status !== "Afgerond"));
+  if (zonder.length) return `<span class="pill p-hoog">${zonder.length} hoge gevoeligheid${zonder.length > 1 ? "heden" : ""} zonder actie</span>`;
+  if (!ms.length) return `<span class="pill p-mute">Start met meten</span>`;
+  const top = groupKg(ms, "stroom")[0];
+  if (!act.some((x) => x.status === "Lopend" || x.status === "Gepland")) return `<span class="pill p-midden">Nog geen actie gepland</span>`;
+  return `<span class="pill p-ok">Grootste stroom: ${esc((STROMEN[top[0]] || top[0]).split(" (")[0].toLowerCase())}</span>`;
+}
+
+// ---------- render ----------
+function render() {
+  const sites = [...S.sites].sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99));
+  if (!ui.site || !sites.some((s) => s.id === ui.site)) ui.site = sites[0]?.id || null;
+  $("#siteWrap").hidden = !sessie || !sites.length;
+  $("#siteSel").innerHTML = sites.map((s) => `<option value="${esc(s.id)}"${s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("") || `<option>Nog geen site</option>`;
+  renderNav();
+  const main = $("#main");
+  if (!sessie) { $("#nav").innerHTML = ""; main.innerHTML = viewLogin(); return; }
+  if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
+  if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
+  if (ui.view === "overzicht") renderOverzicht(main);
+  else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
+  else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
+}
+
+function renderNav() {
+  if (!sessie) return;
+  const afd = siteAfd();
+  const btn = (id, label, extra = "") => `<button data-view="${esc(id)}" aria-current="${ui.view === id}"><span>${esc(label)}</span>${extra}</button>`;
+  const groep = (type, titel) => {
+    const l = afd.filter((a) => a.type === type);
+    if (!l.length) return "";
+    return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`)).join("");
+  };
+  $("#nav").innerHTML = btn("overzicht", "Overzicht site") + groep("woonafdeling", "Woonafdelingen") + groep("restaurant", "Restaurants") + groep("andere", "Andere") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer");
+  $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; render(); window.scrollTo({ top: 0 }); }));
+}
+
+function periodeSeg() {
+  return `<div class="seg" role="group" aria-label="Periode">${[[7, "7 dagen"], [30, "30 dagen"], [90, "90 dagen"], [0, "Alles"]].map(([v, l]) => `<button data-per="${v}" aria-pressed="${ui.periode === v}">${l}</button>`).join("")}</div>`;
+}
+function bindPeriode(root) { root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
+
+function barsHtml(entries, labelMap) {
+  if (!entries.length) return `<p class="hint">Nog geen metingen in deze periode.</p>`;
+  const max = entries[0][1] || 1;
+  return `<div class="bars">${entries.map(([k, v]) => `<div class="b"><span>${esc(labelMap ? labelMap[k] || k : k)}</span><div class="bar"><i style="width:${(v / max) * 100}%"></i></div><span class="num">${kg(v)}</span></div>`).join("")}</div>`;
+}
+
+function renderOverzicht(main) {
+  const site = S.sites.find((s) => s.id === ui.site);
+  const afd = siteAfd();
+  const ids = new Set(afd.map((a) => a.id));
+  const ms = S.metingen.filter((m) => ids.has(m.afdelingId) && inPeriode(m));
+  const gev = S.gevoeligheden.filter((g) => ids.has(g.afdelingId));
+  const act = S.acties.filter((a) => ids.has(a.afdelingId));
+  const maxKg = Math.max(1, ...afd.map((a) => sum(ofAfd(ms, a.id))));
+  main.innerHTML = `
+    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div>${periodeSeg()}</div>
+    <div class="stats">
+      <div class="stat"><b>${kg(sum(ms))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
+      <div class="stat"><b>${ms.length}</b><span>metingen</span></div>
+      <div class="stat"><b>${gev.length}</b><span>gevoeligheden, ${gev.filter((g) => g.impact === "hoog").length} hoog</span></div>
+      <div class="stat"><b>${act.filter((a) => a.status === "Lopend" || a.status === "Gepland").length}</b><span>acties gepland of lopend</span></div>
+    </div>
+    <section class="panel">
+      <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Verspilling</th><th style="width:22%"></th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
+          <tr class="click" data-open="${esc(a.id)}" tabindex="0">
+            <td><b>${esc(a.naam)}</b><br><span class="hint">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere"}</span></td>
+            <td class="num">${kg(k)}</td>
+            <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
+            <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
+            <td>${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
+            <td class="focus">${focusFor(a)}</td>
+          </tr>`; }).join("") || `<tr><td colspan="6" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+      </table></div>
+    </section>
+    <div class="two">
+      <section class="panel"><h3 style="margin-bottom:12px">Per soort verlies</h3>${barsHtml(groupKg(ms, "stroom"), STROMEN)}</section>
+      <section class="panel"><h3 style="margin-bottom:12px">Per component</h3>${barsHtml(groupKg(ms, "component").slice(0, 6))}</section>
+    </div>`;
+  bindPeriode(main);
+  main.querySelectorAll("[data-open]").forEach((tr) => {
+    const go = () => { ui.view = tr.dataset.open; ui.tab = "metingen"; render(); window.scrollTo({ top: 0 }); };
+    tr.onclick = go; tr.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  });
+}
+
+function opts(list, sel) { return list.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join(""); }
+function optsMap(map, sel) { return Object.entries(map).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v)}</option>`).join(""); }
+const dis = () => (canWrite ? "" : " disabled");
+
+function renderAfdeling(main, a) {
+  const ms = ofAfd(S.metingen, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || (y.aangemaakt || "").localeCompare(x.aangemaakt || ""));
+  const msP = ms.filter(inPeriode);
+  const gev = ofAfd(S.gevoeligheden, a.id).sort((x, y) => NIVEAU.indexOf(y.impact) - NIVEAU.indexOf(x.impact));
+  const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
+  const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
+  main.innerHTML = `
+    <div class="row-head"><div><div class="eyebrow">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Afdeling"} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div>${periodeSeg()}</div>
+    <div class="stats">
+      <div class="stat"><b>${kg(sum(msP))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
+      <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag</span></div>
+      <div class="stat"><b>${gev.filter((g) => g.impact === "hoog").length}</b><span>hoge gevoeligheden</span></div>
+      <div class="stat"><b>${act.filter((x) => x.status !== "Afgerond").length}</b><span>open acties</span></div>
+    </div>
+    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${l}</button>`).join("")}</div>
+    <div id="tabbody"></div>`;
+  bindPeriode(main);
+  main.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.tab; render(); }));
+  const body = $("#tabbody");
+  if (ui.tab === "metingen") tabMetingen(body, a, ms, msP);
+  else if (ui.tab === "gevoeligheden") tabGevoeligheden(body, a, gev, act);
+  else tabActies(body, a, gev, act);
+}
+
+function tabMetingen(body, a, ms, msP) {
+  body.innerHTML = `<div class="two">
+    <section class="panel">
+      <h3 style="margin-bottom:10px">Meting toevoegen</h3>
+      <form class="f" id="fMeting">
+        <label>Datum<input type="date" id="mDatum" value="${today()}" required></label>
+        <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, "Middagmaal")}</select></label>
+        <label class="full">Soort verlies<select id="mStroom">${optsMap(STROMEN, a.type === "restaurant" ? "overproductie" : "bordrest")}</select></label>
+        <label>Component<select id="mComp">${opts(COMPONENTEN, "Gemengd of onbekend")}</select></label>
+        <label>Gewicht (kg)<input type="number" id="mKg" min="0" step="0.1" inputmode="decimal" required placeholder="bv. 2,4"></label>
+        <label class="full">Opmerking<input id="mOpm" placeholder="bv. stoofvlees te taai, 3 bewoners in ziekenhuis"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Meting opslaan</button></div>
+      </form>
+      <p class="hint" style="margin-top:10px">Weeg netto: trek het gewicht van bak of emmer af. Eén meting per soort verlies en component geeft het scherpste beeld.</p>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:12px">Verdeling in deze periode</h3>${barsHtml(groupKg(msP, "stroom"), STROMEN)}<div style="height:16px"></div>${barsHtml(groupKg(msP, "component").slice(0, 5))}</section>
+  </div>
+  <section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Recente metingen</h3>
+    ${ms.length ? `<div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th>Soort</th><th>Component</th><th style="text-align:right">Gewicht</th><th>Opmerking</th><th></th></tr></thead><tbody>
+    ${ms.slice(0, 40).map((m) => `<tr><td>${fmtDate(m.datum)}</td><td>${esc(m.maaltijd)}</td><td>${esc((STROMEN[m.stroom] || m.stroom).split(" (")[0])}</td><td>${esc(m.component)}</td><td class="num">${kg(Number(m.kg) || 0)}</td><td>${esc(m.opmerking)}</td><td>${canWrite ? `<button class="ghost" data-del="metingen/${esc(m.id)}" aria-label="Verwijder meting">Verwijder</button>` : ""}</td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty">Nog geen metingen voor ${esc(a.naam)}. Voeg hierboven de eerste toe.</div>`}
+  </section>`;
+  $("#fMeting").onsubmit = async (e) => {
+    e.preventDefault();
+    const val = Number(String($("#mKg").value).replace(",", "."));
+    if (!(val > 0)) { toast("Vul een gewicht in groter dan 0 kg."); return; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, stroom: $("#mStroom").value, component: $("#mComp").value, kg: val, opmerking: $("#mOpm").value.trim() };
+    if (await write(() => sb.from("vv_metingen").insert(naarDb(rec)), `Meting van ${kg(val)} opgeslagen`)) { $("#mKg").value = ""; $("#mOpm").value = ""; }
+  };
+  bindDeletes(body);
+}
+
+function tabGevoeligheden(body, a, gev, act) {
+  const sug = SUG_GEV[a.type] || [...SUG_GEV.woonafdeling, ...SUG_GEV.restaurant];
+  body.innerHTML = `<div class="two">
+    <section class="panel">
+      <h3 style="margin-bottom:6px">Gevoeligheid vastleggen</h3>
+      <p class="hint" style="margin-bottom:10px">Wat maakt verspilling op deze afdeling moeilijk te vermijden? Denk aan bewoners, organisatie en regels.</p>
+      <form class="f" id="fGev">
+        <label class="full">Categorie<select id="gCat">${opts(CATEGORIEEN)}</select></label>
+        <label class="full">Omschrijving<textarea id="gOms" required placeholder="bv. 8 van de 28 bewoners krijgen gemixte voeding"></textarea></label>
+        <label>Impact op verspilling<select id="gImp">${opts(NIVEAU, "midden")}</select></label>
+        <label>Bron<input id="gBron" placeholder="bv. hoofdverpleegkundige"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Gevoeligheid opslaan</button></div>
+      </form>
+      <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Vertrekpunten voor ${a.type === "restaurant" ? "een restaurant" : "een woonafdeling"}</div>
+      <div class="chips">${sug.map((s, i) => `<button type="button" data-sug="${i}">${esc(s[1])}</button>`).join("")}</div></div>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:4px">Vastgelegde gevoeligheden</h3>
+      ${gev.length ? `<div class="list">${gev.map((g) => { const gekoppeld = act.filter((x) => x.gevoeligheidId === g.id); return `<div class="item">
+        <div><div class="meta"><span class="pill p-${esc(g.impact)}">${esc(g.impact)}</span><span>${esc(g.categorie)}</span>${g.bron ? `<span>· ${esc(g.bron)}</span>` : ""}</div><p>${esc(g.omschrijving)}</p>
+        <div class="meta" style="margin-top:4px">${gekoppeld.length ? gekoppeld.map((x) => `<span class="pill p-mute">${esc(x.status)}: ${esc(x.titel)}</span>`).join("") : `<span>Nog geen actie</span>`}</div></div>
+        <div class="side">${canWrite ? `<button data-act="${esc(g.id)}">Actie</button><button class="ghost" data-del="gevoeligheden/${esc(g.id)}" aria-label="Verwijder gevoeligheid">✕</button>` : ""}</div></div>`; }).join("")}</div>`
+      : `<div class="empty">Nog geen gevoeligheden voor ${esc(a.naam)}. Kies een vertrekpunt links of schrijf er zelf een.</div>`}
+    </section></div>`;
+  body.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => { const s = sug[Number(b.dataset.sug)]; $("#gCat").value = s[0]; $("#gOms").value = s[1]; $("#gOms").focus(); }));
+  body.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { ui.prefillAct = b.dataset.act; ui.tab = "acties"; render(); }));
+  $("#fGev").onsubmit = async (e) => {
+    e.preventDefault();
+    const oms = $("#gOms").value.trim();
+    if (!oms) { toast("Schrijf kort wat de gevoeligheid is."); return; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, categorie: $("#gCat").value, omschrijving: oms, impact: $("#gImp").value, bron: $("#gBron").value.trim() };
+    if (await write(() => sb.from("vv_gevoeligheden").insert(naarDb(rec)), "Gevoeligheid opgeslagen")) { $("#gOms").value = ""; $("#gBron").value = ""; }
+  };
+  bindDeletes(body);
+}
+
+function tabActies(body, a, gev, act) {
+  const pre = ui.prefillAct;
+  const cell = (imp, insp) => act.filter((x) => x.status !== "Afgerond" && (x.impact === "hoog") === imp && (x.inspanning === "laag") === insp);
+  const mx = (t, l) => `<div><h4>${t}</h4>${l.length ? `<ul>${l.map((x) => `<li>${esc(x.titel)}</li>`).join("")}</ul>` : `<p class="hint">Geen</p>`}</div>`;
+  body.innerHTML = `<div class="two">
+    <section class="panel">
+      <h3 style="margin-bottom:10px">Actie toevoegen</h3>
+      <form class="f" id="fAct">
+        <label class="full">Titel<input id="aTit" required placeholder="bv. Kleinere basisportie met bijschep"></label>
+        <label class="full">Wat houdt het in<textarea id="aOms"></textarea></label>
+        <label class="full">Pakt deze gevoeligheid aan<select id="aGev"><option value="">Geen specifieke</option>${gev.map((g) => `<option value="${esc(g.id)}"${g.id === pre ? " selected" : ""}>${esc(g.omschrijving.slice(0, 70))}</option>`).join("")}</select></label>
+        <label>Verwachte impact<select id="aImp">${opts(NIVEAU, "midden")}</select></label>
+        <label>Inspanning<select id="aInsp">${opts(NIVEAU, "midden")}</select></label>
+        <label>Status<select id="aStat">${opts(STATUS, "Idee")}</select></label>
+        <label>Trekker<input id="aEig" placeholder="bv. teamleider"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Actie opslaan</button></div>
+      </form>
+      <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Bewezen acties om mee te starten</div>
+      <div class="chips">${SUG_ACT.map((s, i) => `<button type="button" data-sa="${i}">${esc(s[0])}</button>`).join("")}</div></div>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:10px">Prioriteren</h3>
+      <div class="matrix">${mx("Snel resultaat: hoge impact, lage inspanning", cell(true, true))}${mx("Project: hoge impact, meer inspanning", cell(true, false))}${mx("Meenemen: lagere impact, lage inspanning", cell(false, true))}${mx("Herbekijken: lagere impact, meer inspanning", cell(false, false))}</div>
+    </section></div>
+  <section class="panel" style="margin-top:24px"><h3 style="margin-bottom:4px">Acties op ${esc(a.naam)}</h3>
+    ${act.length ? `<div class="list">${act.map((x) => { const g = gev.find((y) => y.id === x.gevoeligheidId); return `<div class="item">
+      <div><div class="meta"><span class="pill p-${x.status === "Afgerond" ? "ok" : x.status === "Lopend" ? "midden" : "mute"}">${esc(x.status)}</span><span>impact ${esc(x.impact)} · inspanning ${esc(x.inspanning)}</span>${x.eigenaar ? `<span>· ${esc(x.eigenaar)}</span>` : ""}</div>
+      <p><b>${esc(x.titel)}</b></p>${x.omschrijving ? `<p class="hint">${esc(x.omschrijving)}</p>` : ""}${g ? `<p class="hint">Voor: ${esc(g.omschrijving)}</p>` : ""}</div>
+      <div class="side">${canWrite ? `<select data-stat="${esc(x.id)}" aria-label="Status">${opts(STATUS, x.status)}</select><button class="ghost" data-del="acties/${esc(x.id)}" aria-label="Verwijder actie">✕</button>` : ""}</div></div>`; }).join("")}</div>`
+    : `<div class="empty">Nog geen acties voor ${esc(a.naam)}. Start met een bewezen actie of koppel er een aan een gevoeligheid.</div>`}
+  </section>`;
+  if (pre) { const g = gev.find((y) => y.id === pre); if (g) $("#aTit").focus(); }
+  body.querySelectorAll("[data-sa]").forEach((b) => (b.onclick = () => { const s = SUG_ACT[Number(b.dataset.sa)]; $("#aTit").value = s[0]; $("#aOms").value = s[1]; $("#aImp").value = s[2]; $("#aInsp").value = s[3]; $("#aTit").focus(); }));
+  body.querySelectorAll("[data-stat]").forEach((s) => (s.onchange = () => write(() => sb.from("vv_acties").update({ status: s.value, gewijzigd: new Date().toISOString() }).eq("id", s.dataset.stat), "Status bijgewerkt")));
+  $("#fAct").onsubmit = async (e) => {
+    e.preventDefault();
+    const tit = $("#aTit").value.trim();
+    if (!tit) { toast("Geef de actie een titel."); return; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, titel: tit, omschrijving: $("#aOms").value.trim(), gevoeligheidId: $("#aGev").value || null, impact: $("#aImp").value, inspanning: $("#aInsp").value, status: $("#aStat").value, eigenaar: $("#aEig").value.trim() };
+    if (await write(() => sb.from("vv_acties").insert(naarDb(rec)), "Actie opgeslagen")) { ui.prefillAct = null; }
+  };
+  bindDeletes(body);
+}
+
+const pendingDel = new Set();
+function bindDeletes(root) {
+  root.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => {
+    const p = b.dataset.del;
+    if (!pendingDel.has(p)) { pendingDel.add(p); b.textContent = "Zeker?"; b.style.color = "var(--red)"; setTimeout(() => { pendingDel.delete(p); if (b.isConnected) { b.textContent = b.getAttribute("aria-label").startsWith("Verwijder meting") ? "Verwijder" : "✕"; b.style.color = ""; } }, 3000); return; }
+    pendingDel.delete(p);
+    const [tabel, id] = p.split("/");
+    write(() => sb.from("vv_" + tabel).delete().eq("id", id), "Verwijderd");
+  }));
+}
+
+function beheerHtml() {
+  const afd = siteAfd();
+  return `<div class="row-head"><div><div class="eyebrow">Beheer</div><h2>Sites en afdelingen</h2></div></div>
+  <div class="two">
+    <section class="panel"><h3 style="margin-bottom:10px">Afdeling toevoegen aan ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}</h3>
+      <form class="f" id="fAfd">
+        <label class="full">Naam<input id="bNaam" required placeholder="bv. Sint-Vincentius"></label>
+        <label>Type<select id="bType"><option value="woonafdeling">Woonafdeling</option><option value="restaurant">Restaurant</option><option value="andere">Andere</option></select></label>
+        <label>Volgorde<input type="number" id="bVolg" value="${afd.length + 1}"></label>
+        <label class="full">Omschrijving<input id="bOms" placeholder="bv. 30 bewoners, maaltijden uit centrale keuken"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}${S.sites.length ? "" : " disabled"}>Afdeling toevoegen</button></div>
+      </form>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:10px">Nieuwe site</h3>
+      <p class="hint" style="margin-bottom:10px">Elke site krijgt dezelfde structuur: afdelingen, metingen, gevoeligheden en acties.</p>
+      <form class="f" id="fSite">
+        <label class="full">Naam van de site<input id="sNaam" required placeholder="bv. WZC De Linde"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Site toevoegen</button></div>
+      </form>
+    </section>
+  </div>
+  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3>
+    ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><p><b>${esc(a.naam)}</b> <span class="hint">· ${esc(a.type)}</span></p>
+      <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
+      <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
+    <p class="hint" style="margin-top:10px">Een afdeling verwijderen laat haar metingen, gevoeligheden en acties staan in de opslag.</p>
+  </section>`;
+}
+function bindBeheer() {
+  const fa = $("#fAfd"), fs = $("#fSite");
+  if (fa) fa.onsubmit = async (e) => {
+    e.preventDefault();
+    const naam = $("#bNaam").value.trim(); if (!naam) return;
+    const id = slug(ui.site + "-" + naam);
+    const rec = { siteId: ui.site, naam, type: $("#bType").value, volgorde: Number($("#bVolg").value) || 99, omschrijving: $("#bOms").value.trim() };
+    if (await write(() => sb.from("vv_afdelingen").insert({ id, ...naarDb(rec) }), `${naam} toegevoegd`)) { $("#bNaam").value = ""; $("#bOms").value = ""; }
+  };
+  if (fs) fs.onsubmit = async (e) => {
+    e.preventDefault();
+    const naam = $("#sNaam").value.trim(); if (!naam) return;
+    const id = slug(naam);
+    if (await write(() => sb.from("vv_sites").insert({ id, naam, volgorde: S.sites.length + 1 }), `${naam} toegevoegd`)) { ui.site = id; saveUi(); ui.view = "beheer"; }
+  };
+  document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
+  bindDeletes(document);
+}
+
+$("#siteSel").onchange = (e) => { ui.site = e.target.value; ui.view = "overzicht"; saveUi(); render(); };
+
+// ---------- opslag ----------
+const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties" };
+// Database gebruikt snake_case (site_id), de app camelCase (siteId).
+const vanDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]));
+const naarDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase()), v]));
+
+async function selectAlles(tabel) {
+  const uit = [];
+  for (let van = 0; ; van += 1000) {
+    const { data, error } = await sb.from(tabel).select("*").order("id").range(van, van + 999);
+    if (error) return { error };
+    uit.push(...data);
+    if (data.length < 1000) return { data: uit, error: null };
+  }
+}
+async function laadAlles() {
+  const keys = Object.keys(TABELLEN);
+  const res = await Promise.all(keys.map((k) => selectAlles(TABELLEN[k])));
+  if (res.some((r) => r.error)) { banner("De gegevens konden niet geladen worden. Heb je toegang gekregen? Vraag het aan de beheerder."); return; }
+  banner("");
+  keys.forEach((k, i) => (S[k] = res[i].data.map(vanDb).map((r) => (r.kg != null ? { ...r, kg: Number(r.kg) } : r))));
+  ready = true;
+  renderSafe();
+}
+function banner(msg) { const b = $("#banner"); b.textContent = msg || ""; b.hidden = !msg; }
+
+// Niet opnieuw tekenen terwijl iemand een formulier invult; dat zou getypte tekst wissen.
+function renderSafe() {
+  const a = document.activeElement;
+  const typing = a && a.closest && a.closest("form") && a.matches("input, textarea") && a.value;
+  if (typing) { clearTimeout(renderSafe.t); renderSafe.t = setTimeout(renderSafe, 1500); return; }
+  render();
+}
+
+function viewLogin() {
+  if (!sb) return '<div class="empty">Laden…</div>';
+  return `<form class="panel login" id="fLogin">
+    <h2>Aanmelden</h2>
+    <p class="hint">Vul je e-mailadres in. Je krijgt een mail met een link om je aan te melden.</p>
+    <label>E-mailadres<input type="text" inputmode="email" autocomplete="email" id="lMail" required></label>
+    <div><button class="primary" type="submit">Stuur aanmeldlink</button></div>
+  </form>`;
+}
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "fLogin") return;
+  e.preventDefault();
+  const f = e.target, knop = f.querySelector("button[type=submit]");
+  const email = $("#lMail").value.trim();
+  if (!email) return;
+  knop.disabled = true;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
+  knop.disabled = false;
+  if (error) toast("Versturen mislukt: " + error.message);
+  else f.innerHTML = `<h2>Kijk in je mailbox</h2><p style="margin:0">We stuurden een aanmeldlink naar <strong>${esc(email)}</strong>. Open die link op dit toestel.</p>`;
+});
+$("#logout").onclick = () => sb.auth.signOut();
+
+let kanaal = null;
+function zetSessie(s) {
+  const was = !!sessie;
+  sessie = s;
+  $("#who").hidden = !s;
+  $("#who-mail").textContent = s ? s.user.email : "";
+  if (s && !was) {
+    laadAlles();
+    kanaal = sb.channel("voedselverspilling-wijzigingen");
+    Object.values(TABELLEN).forEach((table) => kanaal.on("postgres_changes", { event: "*", schema: "public", table }, () => laadAlles()));
+    kanaal.subscribe();
+  }
+  if (!s) { Object.keys(TABELLEN).forEach((k) => (S[k] = [])); ready = false; if (kanaal) { sb.removeChannel(kanaal); kanaal = null; } }
+  render();
+}
+
+render();
+(async () => {
+  const cfg = window.VOEDSELVERSPILLING_CONFIG || {};
+  if (!window.supabase || !cfg.supabaseUrl || !cfg.supabaseAnonKey) { banner("De app kon niet starten: de koppeling met de database ontbreekt (config.js)."); return; }
+  sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  const { data } = await sb.auth.getSession();
+  zetSessie(data.session);
+  sb.auth.onAuthStateChange((_ev, s) => { if (!!s !== !!sessie) zetSessie(s); else sessie = s; });
+  // Bij terugkeer naar de app (gsm) gegevens verversen.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && sessie) laadAlles(); });
+})();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>

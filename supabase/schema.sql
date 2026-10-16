@@ -1,0 +1,121 @@
+-- Voedselverspilling: sites, afdelingen, metingen, gevoeligheden en acties.
+-- Draait in hetzelfde Supabase-project als de veiligheidsrondes en de staalnamen en raakt die gegevens niet aan.
+-- Het gebruikt wel de bestaande toegangslijst "toegang" en de functie heeft_toegang() van de
+-- veiligheidsrondes: wie daar toegang heeft, heeft ook toegang tot de voedselverspilling.
+-- Plak dit volledig in Supabase > SQL Editor en klik op Run. Opnieuw uitvoeren kan geen kwaad.
+
+-- Veiligheidscheck: de toegangslijst van de veiligheidsrondes moet al bestaan.
+do $$ begin
+  if to_regprocedure('public.heeft_toegang()') is null then
+    raise exception 'Functie public.heeft_toegang() ontbreekt. Voer eerst het schema van de veiligheidsrondes uit.';
+  end if;
+end $$;
+
+-- Sites en hun afdelingen. De id is een korte tekst (bv. "wzc-huize-nazareth").
+create table if not exists public.vv_sites (
+  id text primary key,
+  naam text not null,
+  volgorde integer not null default 0,
+  aangemaakt timestamptz not null default now()
+);
+
+-- "type": woonafdeling, restaurant of andere.
+create table if not exists public.vv_afdelingen (
+  id text primary key,
+  site_id text not null references public.vv_sites(id),
+  naam text not null,
+  type text not null default 'woonafdeling',
+  volgorde integer not null default 0,
+  omschrijving text not null default '',
+  aangemaakt timestamptz not null default now()
+);
+create index if not exists vv_afdelingen_site_idx on public.vv_afdelingen(site_id, volgorde);
+
+-- Gewogen verspilling. "stroom": bordrest, overproductie, bederf of bereiding.
+create table if not exists public.vv_metingen (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  afdeling_id text not null references public.vv_afdelingen(id),
+  datum date not null,
+  maaltijd text not null default '',
+  stroom text not null,
+  component text not null default '',
+  kg numeric(8,2) not null check (kg >= 0),
+  opmerking text not null default '',
+  aangemaakt timestamptz not null default now(),
+  aangemaakt_door uuid default auth.uid()
+);
+create index if not exists vv_metingen_afdeling_idx on public.vv_metingen(afdeling_id, datum desc);
+
+-- Wat verspilling op een afdeling moeilijk te vermijden maakt. "impact": laag, midden of hoog.
+create table if not exists public.vv_gevoeligheden (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  afdeling_id text not null references public.vv_afdelingen(id),
+  categorie text not null default '',
+  omschrijving text not null,
+  impact text not null default 'midden',
+  bron text not null default '',
+  aangemaakt timestamptz not null default now(),
+  aangemaakt_door uuid default auth.uid()
+);
+create index if not exists vv_gevoeligheden_afdeling_idx on public.vv_gevoeligheden(afdeling_id);
+
+-- Acties per afdeling, optioneel gekoppeld aan een gevoeligheid.
+-- "status": Idee, Gepland, Lopend of Afgerond.
+create table if not exists public.vv_acties (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  afdeling_id text not null references public.vv_afdelingen(id),
+  gevoeligheid_id uuid references public.vv_gevoeligheden(id) on delete set null,
+  titel text not null,
+  omschrijving text not null default '',
+  impact text not null default 'midden',
+  inspanning text not null default 'midden',
+  status text not null default 'Idee',
+  eigenaar text not null default '',
+  aangemaakt timestamptz not null default now(),
+  gewijzigd timestamptz not null default now(),
+  aangemaakt_door uuid default auth.uid()
+);
+create index if not exists vv_acties_afdeling_idx on public.vv_acties(afdeling_id);
+
+alter table public.vv_sites enable row level security;
+alter table public.vv_afdelingen enable row level security;
+alter table public.vv_metingen enable row level security;
+alter table public.vv_gevoeligheden enable row level security;
+alter table public.vv_acties enable row level security;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties'] loop
+    execute format('drop policy if exists %I on public.%I', t || ' voor collega''s', t);
+    execute format('create policy %I on public.%I for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang())', t || ' voor collega''s', t);
+  end loop;
+end $$;
+
+-- Live bijwerken wanneer een collega iets wijzigt.
+do $$
+declare t text;
+begin
+  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties'] loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;
+
+-- Eerste site met haar afdelingen. Bestaande rijen worden niet overschreven.
+insert into public.vv_sites (id, naam, volgorde) values
+  ('wzc-huize-nazareth', 'WZC-Huize Nazareth', 1)
+on conflict (id) do nothing;
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, omschrijving) values
+  ('wzc-huize-nazareth-heilig-hart', 'wzc-huize-nazareth', 'Heilig Hart', 'woonafdeling', 1, ''),
+  ('wzc-huize-nazareth-sint-jozef', 'wzc-huize-nazareth', 'Sint-Jozef', 'woonafdeling', 2, ''),
+  ('wzc-huize-nazareth-sint-elisabeth', 'wzc-huize-nazareth', 'Sint-Elisabeth', 'woonafdeling', 3, ''),
+  ('wzc-huize-nazareth-sint-franciscus', 'wzc-huize-nazareth', 'Sint-Franciscus', 'woonafdeling', 4, ''),
+  ('wzc-huize-nazareth-gozewijn', 'wzc-huize-nazareth', 'Restaurant Gozewijn', 'restaurant', 5, 'Restaurant voor medewerkers'),
+  ('wzc-huize-nazareth-prieeltje', 'wzc-huize-nazareth', 'Het Prieeltje', 'restaurant', 6, 'Buurtrestaurant')
+on conflict (id) do nothing;
