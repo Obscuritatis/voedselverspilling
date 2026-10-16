@@ -12,6 +12,10 @@ Webapp om voedselverspilling in kaart te brengen per site en per afdeling. Per a
 Het overzicht van een site zet de afdelingen naast elkaar en toont waar je lokaal kan inzetten, bv. een
 hoge gevoeligheid zonder actie of een afdeling die nog niet meet.
 
+Met *Excel-verslag* (op het overzicht van een site of op een afdeling) download je een verslag voor de gekozen
+periode: een overzichtsblad per afdeling, verdeling per soort verlies en component, en aparte bladen met alle
+metingen, gevoeligheden en acties. Onder *Beheer* kan je na een test alle gegevens van een site wissen.
+
 Eerste site: WZC-Huize Nazareth, met de woonafdelingen Heilig Hart, Sint-Jozef, Sint-Elisabeth en
 Sint-Franciscus, restaurant Gozewijn (medewerkers) en het Prieeltje (buurtrestaurant).
 Andere sites en afdelingen voeg je toe in de app onder *Beheer*. De vertrekpunten voor gevoeligheden en acties
@@ -41,6 +45,7 @@ De koppeling met Supabase staat in [`config.js`](config.js) (zelfde project als 
 
 ## Opmerkingen
 
+- Metingen, gevoeligheden en acties wis je één voor één (twee keer klikken) of in één keer per site onder *Beheer*.
 - Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen; zo gaan er geen gegevens verloren.
 - De gratis aanmeldmails van Supabase zijn beperkt in aantal per uur. Voor een grotere groep stel je
   een eigen mailserver in onder *Authentication > SMTP*.

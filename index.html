@@ -92,6 +92,7 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 24px }
 .stat b { display: block; font-family: var(--font-display); font-size: 2rem; font-variant-numeric: tabular-nums; line-height: 1.1 }
 .stat span { color: var(--muted); font-size: .85rem }
 .row-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px }
+.kop-acties { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
 .seg button { border: 0; border-radius: 0; padding: 5px 10px; font-size: .85rem }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg) }
@@ -258,17 +259,18 @@ const ofAfd = (list, id) => list.filter((x) => x.afdelingId === id);
 const sum = (arr) => arr.reduce((s, m) => s + (Number(m.kg) || 0), 0);
 function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[key]] || 0) + (Number(m.kg) || 0))); return Object.entries(g).sort((a, b) => b[1] - a[1]); }
 
-function focusFor(a) {
+function focusInfo(a) {
   const ms = ofAfd(S.metingen, a.id).filter(inPeriode);
   const gev = ofAfd(S.gevoeligheden, a.id);
   const act = ofAfd(S.acties, a.id);
   const zonder = gev.filter((g) => g.impact === "hoog" && !act.some((x) => x.gevoeligheidId === g.id && x.status !== "Afgerond"));
-  if (zonder.length) return `<span class="pill p-hoog">${zonder.length} hoge gevoeligheid${zonder.length > 1 ? "heden" : ""} zonder actie</span>`;
-  if (!ms.length) return `<span class="pill p-mute">Start met meten</span>`;
+  if (zonder.length) return ["hoog", `${zonder.length} hoge gevoeligheid${zonder.length > 1 ? "heden" : ""} zonder actie`];
+  if (!ms.length) return ["mute", "Start met meten"];
   const top = groupKg(ms, "stroom")[0];
-  if (!act.some((x) => x.status === "Lopend" || x.status === "Gepland")) return `<span class="pill p-midden">Nog geen actie gepland</span>`;
-  return `<span class="pill p-ok">Grootste stroom: ${esc((STROMEN[top[0]] || top[0]).split(" (")[0].toLowerCase())}</span>`;
+  if (!act.some((x) => x.status === "Lopend" || x.status === "Gepland")) return ["midden", "Nog geen actie gepland"];
+  return ["ok", `Grootste stroom: ${(STROMEN[top[0]] || top[0]).split(" (")[0].toLowerCase()}`];
 }
+function focusFor(a) { const [cls, tekst] = focusInfo(a); return `<span class="pill p-${cls}">${esc(tekst)}</span>`; }
 
 // ---------- render ----------
 function render() {
@@ -302,7 +304,7 @@ function renderNav() {
 function periodeSeg() {
   return `<div class="seg" role="group" aria-label="Periode">${[[7, "7 dagen"], [30, "30 dagen"], [90, "90 dagen"], [0, "Alles"]].map(([v, l]) => `<button data-per="${v}" aria-pressed="${ui.periode === v}">${l}</button>`).join("")}</div>`;
 }
-function bindPeriode(root) { root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
+function bindPeriode(root) { root.querySelectorAll("[data-excel]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await exporteerVerslag(b.dataset.excel === "site" ? null : b.dataset.excel); } finally { b.disabled = false; } })); root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
 
 function barsHtml(entries, labelMap) {
   if (!entries.length) return `<p class="hint">Nog geen metingen in deze periode.</p>`;
@@ -319,7 +321,7 @@ function renderOverzicht(main) {
   const act = S.acties.filter((a) => ids.has(a.afdelingId));
   const maxKg = Math.max(1, ...afd.map((a) => sum(ofAfd(ms, a.id))));
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div>${periodeSeg()}</div>
+    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="site">Excel-verslag</button></div></div>
     <div class="stats">
       <div class="stat"><b>${kg(sum(ms))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
       <div class="stat"><b>${ms.length}</b><span>metingen</span></div>
@@ -363,7 +365,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Afdeling"} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div>${periodeSeg()}</div>
+    <div class="row-head"><div><div class="eyebrow">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Afdeling"} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
     <div class="stats">
       <div class="stat"><b>${kg(sum(msP))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
       <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag</span></div>
@@ -526,7 +528,15 @@ function beheerHtml() {
     ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><p><b>${esc(a.naam)}</b> <span class="hint">· ${esc(a.type)}</span></p>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
-    <p class="hint" style="margin-top:10px">Een afdeling verwijderen laat haar metingen, gevoeligheden en acties staan in de opslag.</p>
+    <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
+  </section>
+  <section class="panel"><h3 style="margin-bottom:6px">Gegevens van deze site wissen</h3>
+    <p class="hint" style="margin-bottom:10px">Handig na een test: wist alle metingen, gevoeligheden en acties van ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}. De afdelingen blijven staan. Dit kan je niet ongedaan maken.</p>
+    <form class="f" id="fWis">
+      <label>Wat wissen<select id="wWat"><option value="alles">Metingen, gevoeligheden en acties</option><option value="metingen">Enkel metingen</option></select></label>
+      <label>Typ WISSEN om te bevestigen<input id="wBev" autocomplete="off"></label>
+      <div class="full"><button type="submit" style="color:var(--red);border-color:var(--red)"${dis()}>Gegevens wissen</button></div>
+    </form>
   </section>`;
 }
 function bindBeheer() {
@@ -544,11 +554,147 @@ function bindBeheer() {
     const id = slug(naam);
     if (await write(() => sb.from("vv_sites").insert({ id, naam, volgorde: S.sites.length + 1 }), `${naam} toegevoegd`)) { ui.site = id; saveUi(); ui.view = "beheer"; }
   };
+  const fw = $("#fWis");
+  if (fw) fw.onsubmit = async (e) => {
+    e.preventDefault();
+    if ($("#wBev").value.trim().toUpperCase() !== "WISSEN") { toast("Typ WISSEN om te bevestigen."); return; }
+    const tabellen = $("#wWat").value === "metingen" ? ["vv_metingen"] : ["vv_acties", "vv_gevoeligheden", "vv_metingen"];
+    const ok = await write(async () => {
+      for (const t of tabellen) { const r = await sb.from(t).delete().eq("site_id", ui.site); if (r.error) return r; }
+      return { error: null };
+    }, "Gegevens gewist");
+    if (ok) $("#wBev").value = "";
+  };
   document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
   bindDeletes(document);
 }
 
 $("#siteSel").onchange = (e) => { ui.site = e.target.value; ui.view = "overzicht"; saveUi(); render(); };
+
+// ---------- Excel-verslag ----------
+const EXCELJS_URL = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+function laadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  return new Promise((ok, nok) => {
+    const sc = document.createElement("script");
+    sc.src = EXCELJS_URL; sc.onload = () => ok(window.ExcelJS); sc.onerror = nok;
+    document.head.appendChild(sc);
+  });
+}
+const XL = {
+  kop: "FF1D2A23", rand: { style: "thin", color: { argb: "FFDDE3DC" } },
+  impact: { hoog: ["FFF7E3DF", "FFB23B2E"], midden: ["FFF6ECD8", "FFA8741F"], laag: ["FFE3EBF4", "FF3B6390"] },
+  focus: { hoog: ["FFF7E3DF", "FFB23B2E"], midden: ["FFF6ECD8", "FFA8741F"], ok: ["FFE2EFE8", "FF2F6B55"], mute: ["FFF5F6F4", "FF5D6B62"] },
+  status: { Afgerond: ["FFE2EFE8", "FF2F6B55"], Lopend: ["FFF6ECD8", "FFA8741F"], Gepland: ["FFE3EBF4", "FF3B6390"], Idee: ["FFF5F6F4", "FF5D6B62"] },
+};
+const kleur = (cel, [bg, fg]) => { cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } }; cel.font = { bold: true, color: { argb: fg } }; };
+const kgNum = (n) => Math.round(n * 100) / 100;
+const fmtD = (iso) => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return `${d}/${m}/${y}`; };
+const prioriteit = (x) => (x.impact === "hoog" ? (x.inspanning === "laag" ? "Snel resultaat" : "Project") : (x.inspanning === "laag" ? "Meenemen" : "Herbekijken"));
+
+// Eén blad met titel, info-regels en een tabel. Geeft het rijnummer na de tabel terug.
+function tabel(ws, startRij, kolommen, rijen, opmaak) {
+  const kop = ws.getRow(startRij);
+  kolommen.forEach(([titel], i) => {
+    const c = kop.getCell(i + 1); c.value = titel;
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XL.kop } };
+    c.alignment = { vertical: "middle", wrapText: true };
+  });
+  kop.height = 28;
+  rijen.forEach((waarden, k) => {
+    const rij = ws.getRow(startRij + 1 + k);
+    rij.values = waarden;
+    rij.eachCell({ includeEmpty: true }, (c, nr) => {
+      if (nr > kolommen.length) return;
+      c.alignment = { vertical: "top", wrapText: true }; c.border = { top: XL.rand, bottom: XL.rand, left: XL.rand, right: XL.rand };
+      if (kolommen[nr - 1][2]) c.numFmt = kolommen[nr - 1][2];
+    });
+    if (opmaak) opmaak(rij, k);
+  });
+  if (!rijen.length) ws.getRow(startRij + 1).getCell(1).value = "Geen gegevens.";
+  return startRij + 1 + Math.max(1, rijen.length);
+}
+function blad(wb, naam, titel, info, breedtes) {
+  const ws = wb.addWorksheet(naam, { pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  ws.columns = breedtes.map((w) => ({ width: w }));
+  ws.getCell("A1").value = titel; ws.getCell("A1").font = { bold: true, size: 16 };
+  info.forEach(([k, v], i) => { const r = ws.getRow(2 + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; });
+  return { ws, start: 2 + info.length + 1 };
+}
+
+async function exporteerVerslag(afdId) {
+  let ExcelJS;
+  try { ExcelJS = await laadExcelJS(); } catch { toast("Excel-export kon niet geladen worden. Controleer je internetverbinding."); return; }
+  const site = S.sites.find((x) => x.id === ui.site);
+  const afd = siteAfd().filter((a) => !afdId || a.id === afdId);
+  const ids = new Set(afd.map((a) => a.id));
+  const naamVan = (id) => (S.afdelingen.find((a) => a.id === id) || { naam: id }).naam;
+  const ms = S.metingen.filter((m) => ids.has(m.afdelingId) && inPeriode(m)).sort((x, y) => (x.datum || "").localeCompare(y.datum || ""));
+  const gev = S.gevoeligheden.filter((g) => ids.has(g.afdelingId));
+  const act = S.acties.filter((x) => ids.has(x.afdelingId));
+  const onderwerp = afdId ? `${afd[0]?.naam || ""} (${site?.naam || ""})` : site?.naam || "";
+  const periodeTekst = ui.periode ? `Laatste ${ui.periode} dagen (vanaf ${fmtD(new Date(Date.now() - ui.periode * 864e5).toISOString())})` : "Alle metingen";
+  const info = [["Site", site?.naam || ""], ...(afdId ? [["Afdeling", afd[0]?.naam || ""]] : []), ["Periode", periodeTekst], ["Geëxporteerd op", new Date().toLocaleString("nl-BE")]];
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Voedselverspilling"; wb.created = new Date();
+
+  // Overzicht
+  const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
+  const totKg = sum(ms);
+  const samen = [["Totaal verspild (kg)", kgNum(totKg)], ["Aantal metingen", ms.length], ["Gevoeligheden", `${gev.length}, waarvan ${gev.filter((g) => g.impact === "hoog").length} hoog`], ["Acties", `${act.filter((x) => x.status !== "Afgerond").length} open, ${act.filter((x) => x.status === "Afgerond").length} afgerond`]];
+  samen.forEach(([k, v], i) => { const r = o.ws.getRow(o.start + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: "left" }; });
+  let rij = o.start + samen.length + 1;
+  o.ws.getRow(rij).getCell(1).value = "Per afdeling"; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
+  const perAfd = afd.map((a) => {
+    const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
+    const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
+    return [a.naam, a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
+  });
+  const afdKol = [["Afdeling"], ["Type"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
+  rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(10), XL.focus[focusInfo(afd[k])[0]]));
+  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(3).value = kgNum(totKg); t.getCell(3).numFmt = "0.0"; t.getCell(4).value = ms.length; t.font = { bold: true }; rij++; }
+  const verdeling = (titel, key, labels) => {
+    rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
+    const g = groupKg(ms, key);
+    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : "Component"], ["kg", , "0.0"], ["Aandeel", , "0%"]], g.map(([k, v]) => [labels ? labels[k] || k : k, kgNum(v), totKg ? v / totKg : 0]));
+  };
+  verdeling("Per soort verlies", "stroom", STROMEN);
+  verdeling("Per component", "component");
+
+  // Metingen
+  const m = blad(wb, "Metingen", "Metingen", info, [12, 20, 14, 30, 28, 12, 40]);
+  tabel(m.ws, m.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Soort verlies"], ["Component"], ["kg", , "0.0"], ["Opmerking"]],
+    ms.map((x) => [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, STROMEN[x.stroom] || x.stroom, x.component, kgNum(Number(x.kg) || 0), x.opmerking]));
+  if (ms.length) m.ws.autoFilter = { from: { row: m.start, column: 1 }, to: { row: m.start + ms.length, column: 7 } };
+  m.ws.views = [{ state: "frozen", ySplit: m.start }];
+
+  // Gevoeligheden
+  const gs = [...gev].sort((x, y) => naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || NIVEAU.indexOf(y.impact) - NIVEAU.indexOf(x.impact));
+  const g = blad(wb, "Gevoeligheden", "Gevoeligheden", info.filter(([k]) => k !== "Periode"), [20, 26, 10, 50, 18, 40]);
+  tabel(g.ws, g.start, [["Afdeling"], ["Categorie"], ["Impact"], ["Omschrijving"], ["Bron"], ["Acties"]],
+    gs.map((x) => [naamVan(x.afdelingId), x.categorie, x.impact, x.omschrijving, x.bron, act.filter((y) => y.gevoeligheidId === x.id).map((y) => `${y.titel} (${y.status})`).join("\n") || "Nog geen actie"]),
+    (r, k) => kleur(r.getCell(3), XL.impact[gs[k].impact] || XL.impact.laag));
+  g.ws.views = [{ state: "frozen", ySplit: g.start }];
+
+  // Acties
+  const as = [...act].sort((x, y) => naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
+  const a = blad(wb, "Acties", "Acties", info.filter(([k]) => k !== "Periode"), [20, 34, 11, 10, 11, 16, 18, 40, 40]);
+  tabel(a.ws, a.start, [["Afdeling"], ["Actie"], ["Status"], ["Impact"], ["Inspanning"], ["Prioriteit"], ["Trekker"], ["Wat houdt het in"], ["Voor gevoeligheid"]],
+    as.map((x) => [naamVan(x.afdelingId), x.titel, x.status, x.impact, x.inspanning, prioriteit(x), x.eigenaar, x.omschrijving, (gev.find((y) => y.id === x.gevoeligheidId) || {}).omschrijving || ""]),
+    (r, k) => { kleur(r.getCell(3), XL.status[as[k].status] || XL.status.Idee); kleur(r.getCell(4), XL.impact[as[k].impact] || XL.impact.laag); });
+  a.ws.views = [{ state: "frozen", ySplit: a.start }];
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const naam = `Voedselverspilling ${onderwerp} ${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+  const el = document.createElement("a");
+  el.href = URL.createObjectURL(blob); el.download = naam;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(el.href), 10000);
+  toast("Excel-verslag gedownload");
+}
 
 // ---------- opslag ----------
 const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties" };
