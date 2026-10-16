@@ -298,7 +298,7 @@ function renderNav() {
     return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`)).join("");
   };
   $("#nav").innerHTML = btn("overzicht", "Overzicht site") + groep("woonafdeling", "Woonafdelingen") + groep("restaurant", "Restaurants") + groep("andere", "Andere") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer");
-  $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; render(); window.scrollTo({ top: 0 }); }));
+  $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
 }
 
 function periodeSeg() {
@@ -399,11 +399,13 @@ function tabMetingen(body, a, ms, msP) {
     </section>
     <section class="panel"><h3 style="margin-bottom:12px">Verdeling in deze periode</h3>${barsHtml(groupKg(msP, "stroom"), STROMEN)}<div style="height:16px"></div>${barsHtml(groupKg(msP, "component").slice(0, 5))}</section>
   </div>
-  <section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Recente metingen</h3>
+  <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente metingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
     ${ms.length ? `<div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th>Soort</th><th>Component</th><th style="text-align:right">Gewicht</th><th>Opmerking</th><th></th></tr></thead><tbody>
     ${ms.slice(0, 40).map((m) => `<tr><td>${fmtDate(m.datum)}</td><td>${esc(m.maaltijd)}</td><td>${esc((STROMEN[m.stroom] || m.stroom).split(" (")[0])}</td><td>${esc(m.component)}</td><td class="num">${kg(Number(m.kg) || 0)}</td><td>${esc(m.opmerking)}</td><td>${canWrite ? `<button class="ghost" data-del="metingen/${esc(m.id)}" aria-label="Verwijder meting">Verwijder</button>` : ""}</td></tr>`).join("")}
     </tbody></table></div>` : `<div class="empty">Nog geen metingen voor ${esc(a.naam)}. Voeg hierboven de eerste toe.</div>`}
   </section>`;
+  const wb = body.querySelector("[data-wis-afd]");
+  if (wb) wb.onclick = () => { ui.wisAfd = wb.dataset.wisAfd; ui.view = "beheer"; render(); window.scrollTo({ top: document.body.scrollHeight }); setTimeout(() => $("#wBev")?.focus(), 50); };
   $("#fMeting").onsubmit = async (e) => {
     e.preventDefault();
     const val = Number(String($("#mKg").value).replace(",", "."));
@@ -530,11 +532,12 @@ function beheerHtml() {
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
     <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
   </section>
-  <section class="panel"><h3 style="margin-bottom:6px">Gegevens van deze site wissen</h3>
-    <p class="hint" style="margin-bottom:10px">Handig na een test: wist alle metingen, gevoeligheden en acties van ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}. De afdelingen blijven staan. Dit kan je niet ongedaan maken.</p>
+  <section class="panel"><h3 style="margin-bottom:6px">Gegevens wissen</h3>
+    <p class="hint" style="margin-bottom:10px">Handig na een test: wist in één keer de gegevens van één afdeling of van heel ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}. De afdelingen zelf blijven staan. Dit kan je niet ongedaan maken.</p>
     <form class="f" id="fWis">
-      <label>Wat wissen<select id="wWat"><option value="alles">Metingen, gevoeligheden en acties</option><option value="metingen">Enkel metingen</option></select></label>
-      <label>Typ WISSEN om te bevestigen<input id="wBev" autocomplete="off"></label>
+      <label>Van<select id="wVan"><option value="">Heel de site</option>${afd.map((a) => `<option value="${esc(a.id)}"${ui.wisAfd === a.id ? " selected" : ""}>${esc(a.naam)}</option>`).join("")}</select></label>
+      <label>Wat wissen<select id="wWat"><option value="alles">Metingen, gevoeligheden en acties</option><option value="metingen"${ui.wisAfd ? " selected" : ""}>Enkel metingen</option></select></label>
+      <label class="full">Typ WISSEN om te bevestigen<input id="wBev" autocomplete="off"></label>
       <div class="full"><button type="submit" style="color:var(--red);border-color:var(--red)"${dis()}>Gegevens wissen</button></div>
     </form>
   </section>`;
@@ -560,7 +563,8 @@ function bindBeheer() {
     if ($("#wBev").value.trim().toUpperCase() !== "WISSEN") { toast("Typ WISSEN om te bevestigen."); return; }
     const tabellen = $("#wWat").value === "metingen" ? ["vv_metingen"] : ["vv_acties", "vv_gevoeligheden", "vv_metingen"];
     const ok = await write(async () => {
-      for (const t of tabellen) { const r = await sb.from(t).delete().eq("site_id", ui.site); if (r.error) return r; }
+      const van = $("#wVan").value;
+      for (const t of tabellen) { const r = await (van ? sb.from(t).delete().eq("afdeling_id", van) : sb.from(t).delete().eq("site_id", ui.site)); if (r.error) return r; }
       return { error: null };
     }, "Gegevens gewist");
     if (ok) $("#wBev").value = "";
