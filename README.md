@@ -54,6 +54,8 @@ De koppeling met Supabase staat in [`config.js`](config.js) (zelfde project als 
 
 ## Opmerkingen
 
+- Vul geen namen van personen in (trekker, bron, wie de aantallen doorgeeft): enkel functies, bv. *teamleider* of *verantwoordelijke LDC*.
+
 - Metingen, gevoeligheden en acties wis je één voor één (twee keer klikken) of in één keer per afdeling of per site (knop bij de metingen van een afdeling, of onder *Beheer*).
 - Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen; zo gaan er geen gegevens verloren.
 - De gratis aanmeldmails van Supabase zijn beperkt in aantal per uur. Voor een grotere groep stel je

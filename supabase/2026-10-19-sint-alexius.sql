@@ -18,5 +18,5 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit,
   ('wzc-sint-alexius-germanusborn', 'wzc-sint-alexius', 'Germanusborn', 'woonafdeling', 4, 16, null, ''),
   ('wzc-sint-alexius-de-varen', 'wzc-sint-alexius', 'De Varen', 'woonafdeling', 5, 8, null, ''),
   ('wzc-sint-alexius-dagverzorgingscentrum', 'wzc-sint-alexius', 'Dagverzorgingscentrum', 'andere', 6, null, null, 'Wisselt met wie deelneemt; de afdeling geeft de aanwezigen door aan de keuken.'),
-  ('wzc-sint-alexius-buurtrestaurant', 'wzc-sint-alexius', 'Buurtrestaurant', 'restaurant', 7, null, null, 'In het LDC; Désirée Gerlofsma geeft de aantallen door aan de keuken.')
+  ('wzc-sint-alexius-buurtrestaurant', 'wzc-sint-alexius', 'Buurtrestaurant', 'restaurant', 7, null, null, 'In het LDC; de verantwoordelijke LDC geeft de aantallen door aan de keuken.')
 on conflict (id) do nothing;

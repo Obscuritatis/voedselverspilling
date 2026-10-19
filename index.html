@@ -440,7 +440,7 @@ function tabGevoeligheden(body, a, gev, act) {
         <label class="full">Categorie<select id="gCat">${opts(CATEGORIEEN)}</select></label>
         <label class="full">Omschrijving<textarea id="gOms" required placeholder="bv. 8 van de 28 bewoners krijgen gemixte voeding"></textarea></label>
         <label>Impact op verspilling<select id="gImp">${opts(NIVEAU, "midden")}</select></label>
-        <label>Bron<input id="gBron" placeholder="bv. hoofdverpleegkundige"></label>
+        <label>Bron<input id="gBron" placeholder="functie, geen naam (bv. hoofdverpleegkundige)"></label>
         <div class="full"><button class="primary" type="submit"${dis()}>Gevoeligheid opslaan</button></div>
       </form>
       <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Vertrekpunten voor ${a.type === "restaurant" ? "een restaurant" : "een woonafdeling"}</div>
@@ -479,7 +479,7 @@ function tabActies(body, a, gev, act) {
         <label>Verwachte impact<select id="aImp">${opts(NIVEAU, "midden")}</select></label>
         <label>Inspanning<select id="aInsp">${opts(NIVEAU, "midden")}</select></label>
         <label>Status<select id="aStat">${opts(STATUS, "Idee")}</select></label>
-        <label>Trekker<input id="aEig" placeholder="bv. teamleider"></label>
+        <label>Trekker<input id="aEig" placeholder="functie, geen naam (bv. teamleider)"></label>
         <div class="full"><button class="primary" type="submit"${dis()}>Actie opslaan</button></div>
       </form>
       <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Bewezen acties om mee te starten</div>
@@ -530,7 +530,7 @@ function beheerHtml() {
         <label>Volgorde<input type="number" id="bVolg" value="${afd.length + 1}"></label>
         <label>Plaatsen<input type="number" min="0" id="bCap" placeholder="leeg = wisselend"></label>
         <label>Kortverblijf<input type="number" min="0" id="bKv"></label>
-        <label class="full">Wie geeft de aantallen door<input id="bInfo" placeholder="bv. de afdeling zelf, of een naam"></label>
+        <label class="full">Wie geeft de aantallen door<input id="bInfo" placeholder="functie, geen naam (bv. de afdeling zelf)"></label>
         <label class="full">Omschrijving<input id="bOms" placeholder="bv. 30 bewoners, maaltijden uit centrale keuken"></label>
         <div class="full"><button class="primary" type="submit"${dis()}${S.sites.length ? "" : " disabled"}>Afdeling toevoegen</button></div>
       </form>
@@ -548,7 +548,7 @@ function beheerHtml() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         <label class="hint" style="display:flex;gap:6px;align-items:center">Plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
         <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
-        <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door aan de keuken?" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
+        <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
       </div>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
