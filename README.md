@@ -18,6 +18,13 @@ metingen, gevoeligheden en acties. Onder *Beheer* kan je na een test alle gegeve
 
 Eerste site: WZC-Huize Nazareth, met de woonafdelingen Heilig Hart, Sint-Jozef verdiep 2 en 3, Sint-Elisabeth verdiep 1 en 2 en
 Sint-Franciscus, restaurant Gozewijn (medewerkers) en het Prieeltje (buurtrestaurant).
+Tweede site: WZC Sint-Alexius, met Daalborn, Veldborn, Minneborn, Germanusborn, De Varen, het
+dagverzorgingscentrum en het buurtrestaurant (in het LDC).
+
+Per afdeling staat de maximale bezetting (plaatsen + kortverblijven) en wie de aantallen aan de keuken doorgeeft.
+Met de bezetting rekent de app de verspilling per plaats per meetdag uit (in gram), zodat je afdelingen van
+verschillende grootte kan vergelijken. Bij afdelingen met een wisselend aantal eters blijft dat leeg.
+
 Andere sites en afdelingen voeg je toe in de app onder *Beheer*. De vertrekpunten voor gevoeligheden en acties
 staan bovenaan in [`index.html`](index.html) (`SUG_GEV`, `SUG_ACT`).
 
@@ -31,7 +38,7 @@ en dezelfde aanmelding met een link per e-mail, maar eigen tabellen (`vv_sites`,
 
 1. **Database**: open in het bestaande Supabase-project *SQL Editor*, plak de inhoud van
    [`supabase/schema.sql`](supabase/schema.sql) en klik *Run*. Het script maakt enkel nieuwe onderdelen aan,
-   zet Huize Nazareth en zijn afdelingen klaar en mag opnieuw uitgevoerd worden (bv. na een update van de app).
+   zet Huize Nazareth en Sint-Alexius met hun afdelingen klaar en mag opnieuw uitgevoerd worden (bv. na een update van de app).
 2. **Toegang**: de app gebruikt dezelfde toegangslijst (`toegang`) als de veiligheidsrondes.
    Wie daar staat, kan ook de voedselverspilling zien en invullen. Iemand toevoegen:
    ```sql

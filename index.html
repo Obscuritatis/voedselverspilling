@@ -136,6 +136,8 @@ form.f label { display: flex; flex-direction: column; gap: 4px; font-size: .82re
 .tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent); font-weight: 700 }
 .empty { padding: 20px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px }
 .focus { font-size: .85rem }
+.focus .pill { white-space: normal }
+td.nowrap { white-space: nowrap }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: .9rem; z-index: 10 }
 .matrix { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
 .matrix > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-width: 0 }
@@ -259,6 +261,16 @@ const ofAfd = (list, id) => list.filter((x) => x.afdelingId === id);
 const sum = (arr) => arr.reduce((s, m) => s + (Number(m.kg) || 0), 0);
 function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[key]] || 0) + (Number(m.kg) || 0))); return Object.entries(g).sort((a, b) => b[1] - a[1]); }
 
+// Maximale bezetting: vaste plaatsen + kortverblijven. Leeg als de afdeling geen vaste bezetting heeft.
+const plaatsen = (a) => (Number(a.capaciteit) || 0) + (Number(a.kortverblijf) || 0);
+const bezettingTekst = (a) => a.capaciteit ? `${a.capaciteit}${a.kortverblijf ? ` + ${a.kortverblijf} kortverblijf` : ""}` : "";
+// Gemiddelde verspilling per plaats per meetdag, in gram.
+function gramPerPlaats(a, ms) {
+  const n = plaatsen(a), dagen = new Set(ms.map((m) => m.datum)).size;
+  return n && dagen ? (sum(ms) * 1000) / dagen / n : null;
+}
+const gram = (g) => Math.round(g).toLocaleString("nl-BE") + " g";
+
 function focusInfo(a) {
   const ms = ofAfd(S.metingen, a.id).filter(inPeriode);
   const gev = ofAfd(S.gevoeligheden, a.id);
@@ -331,16 +343,18 @@ function renderOverzicht(main) {
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Afdeling</th><th style="text-align:right">Verspilling</th><th style="width:22%"></th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Gemiddelde verspilling per plaats per meetdag">Per plaats/dag</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
             <td><b>${esc(a.naam)}</b><br><span class="hint">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere"}</span></td>
+            <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
             <td class="num">${kg(k)}</td>
             <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
+            <td class="num">${(() => { const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : gram(g); })()}</td>
             <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
-            <td>${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
+            <td class="nowrap">${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
             <td class="focus">${focusFor(a)}</td>
-          </tr>`; }).join("") || `<tr><td colspan="6" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+          </tr>`; }).join("") || `<tr><td colspan="8" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
       </table></div>
     </section>
     <div class="two">
@@ -365,10 +379,10 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Afdeling"} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Afdeling"} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
     <div class="stats">
       <div class="stat"><b>${kg(sum(msP))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
-      <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag</span></div>
+      <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per plaats`; })()}</span></div>
       <div class="stat"><b>${gev.filter((g) => g.impact === "hoog").length}</b><span>hoge gevoeligheden</span></div>
       <div class="stat"><b>${act.filter((x) => x.status !== "Afgerond").length}</b><span>open acties</span></div>
     </div>
@@ -514,6 +528,9 @@ function beheerHtml() {
         <label class="full">Naam<input id="bNaam" required placeholder="bv. Sint-Vincentius"></label>
         <label>Type<select id="bType"><option value="woonafdeling">Woonafdeling</option><option value="restaurant">Restaurant</option><option value="andere">Andere</option></select></label>
         <label>Volgorde<input type="number" id="bVolg" value="${afd.length + 1}"></label>
+        <label>Plaatsen<input type="number" min="0" id="bCap" placeholder="leeg = wisselend"></label>
+        <label>Kortverblijf<input type="number" min="0" id="bKv"></label>
+        <label class="full">Wie geeft de aantallen door<input id="bInfo" placeholder="bv. de afdeling zelf, of een naam"></label>
         <label class="full">Omschrijving<input id="bOms" placeholder="bv. 30 bewoners, maaltijden uit centrale keuken"></label>
         <div class="full"><button class="primary" type="submit"${dis()}${S.sites.length ? "" : " disabled"}>Afdeling toevoegen</button></div>
       </form>
@@ -526,8 +543,13 @@ function beheerHtml() {
       </form>
     </section>
   </div>
-  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde of omschrijving aan; het wordt bewaard zodra je het veld verlaat.</p>
+  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde, bezetting of omschrijving aan; het wordt bewaard zodra je het veld verlaat. Laat de plaatsen leeg als het aantal eters wisselt.</p>
     ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-naam="${esc(a.id)}" value="${esc(a.naam)}" aria-label="Naam ${esc(a.naam)}"${dis()} style="flex:1 1 12rem;font-weight:700"><input type="number" data-volg="${esc(a.id)}" value="${esc(a.volgorde ?? "")}" aria-label="Volgorde ${esc(a.naam)}" title="Volgorde"${dis()} style="width:5rem"><span class="hint">${esc(a.type)}</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
+        <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door aan de keuken?" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
+      </div>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
     <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
@@ -548,8 +570,9 @@ function bindBeheer() {
     e.preventDefault();
     const naam = $("#bNaam").value.trim(); if (!naam) return;
     const id = slug(ui.site + "-" + naam);
-    const rec = { siteId: ui.site, naam, type: $("#bType").value, volgorde: Number($("#bVolg").value) || 99, omschrijving: $("#bOms").value.trim() };
-    if (await write(() => sb.from("vv_afdelingen").insert({ id, ...naarDb(rec) }), `${naam} toegevoegd`)) { $("#bNaam").value = ""; $("#bOms").value = ""; }
+    const rec = { siteId: ui.site, naam, type: $("#bType").value, volgorde: Number($("#bVolg").value) || 99, omschrijving: $("#bOms").value.trim(),
+      capaciteit: $("#bCap").value === "" ? null : Number($("#bCap").value), kortverblijf: $("#bKv").value === "" ? null : Number($("#bKv").value), aantallenInfo: $("#bInfo").value.trim() };
+    if (await write(() => sb.from("vv_afdelingen").insert({ id, ...naarDb(rec) }), `${naam} toegevoegd`)) { ["#bNaam", "#bOms", "#bCap", "#bKv", "#bInfo"].forEach((k) => ($(k).value = "")); }
   };
   if (fs) fs.onsubmit = async (e) => {
     e.preventDefault();
@@ -571,6 +594,10 @@ function bindBeheer() {
   };
   document.querySelectorAll("[data-naam]").forEach((inp) => (inp.onchange = () => { const v = inp.value.trim(); if (!v) { toast("Een afdeling heeft een naam nodig."); return; } write(() => sb.from("vv_afdelingen").update({ naam: v }).eq("id", inp.dataset.naam), "Naam bewaard"); }));
   document.querySelectorAll("[data-volg]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ volgorde: Number(inp.value) || 0 }).eq("id", inp.dataset.volg), "Volgorde bewaard")));
+  const getal = (v) => (v === "" ? null : Math.max(0, Math.round(Number(v)) || 0));
+  document.querySelectorAll("[data-cap]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ capaciteit: getal(inp.value) }).eq("id", inp.dataset.cap), "Bezetting bewaard")));
+  document.querySelectorAll("[data-kv]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ kortverblijf: getal(inp.value) }).eq("id", inp.dataset.kv), "Kortverblijven bewaard")));
+  document.querySelectorAll("[data-info]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ aantallen_info: inp.value.trim() }).eq("id", inp.dataset.info), "Bewaard")));
   document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
   bindDeletes(document);
 }
@@ -647,7 +674,7 @@ async function exporteerVerslag(afdId) {
   wb.creator = "Voedselverspilling"; wb.created = new Date();
 
   // Overzicht
-  const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
+  const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 16, 12, 12, 14, 14, 26, 14, 14, 14, 36]);
   const totKg = sum(ms);
   const samen = [["Totaal verspild (kg)", kgNum(totKg)], ["Aantal metingen", ms.length], ["Gevoeligheden", `${gev.length}, waarvan ${gev.filter((g) => g.impact === "hoog").length} hoog`], ["Acties", `${act.filter((x) => x.status !== "Afgerond").length} open, ${act.filter((x) => x.status === "Afgerond").length} afgerond`]];
   samen.forEach(([k, v], i) => { const r = o.ws.getRow(o.start + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: "left" }; });
@@ -656,11 +683,12 @@ async function exporteerVerslag(afdId) {
   const perAfd = afd.map((a) => {
     const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
     const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
-    return [a.naam, a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
+    const gp = gramPerPlaats(a, m);
+    return [a.naam, a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere", bezettingTekst(a) || "wisselend", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
   });
-  const afdKol = [["Afdeling"], ["Type"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
-  rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(10), XL.focus[focusInfo(afd[k])[0]]));
-  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(3).value = kgNum(totKg); t.getCell(3).numFmt = "0.0"; t.getCell(4).value = ms.length; t.font = { bold: true }; rij++; }
+  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per plaats per meetdag (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
+  rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(12), XL.focus[focusInfo(afd[k])[0]]));
+  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = kgNum(totKg); t.getCell(4).numFmt = "0.0"; t.getCell(5).value = ms.length; t.font = { bold: true }; rij++; }
   const verdeling = (titel, key, labels) => {
     rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
     const g = groupKg(ms, key);
