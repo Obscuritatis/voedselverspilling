@@ -189,6 +189,16 @@ const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
 const NIVEAU = ["laag", "midden", "hoog"];
 
 // Vertrekpunten, geen geregistreerde gegevens: klik om een formulier voor te vullen.
+// Soorten afdelingen: [label, meervoud voor de navigatie, "een ..." voor de vertrekpunten].
+const TYPES = {
+  woonafdeling: ["Woonafdeling", "Woonafdelingen", "een woonafdeling"],
+  patientenafdeling: ["Patiëntenafdeling", "Patiëntenafdelingen", "een patiëntenafdeling"],
+  restaurant: ["Restaurant", "Restaurants", "een restaurant"],
+  andere: ["Andere", "Andere", "een afdeling"],
+};
+const typeNaam = (t) => (TYPES[t] || TYPES.andere)[0];
+const typeOpties = (sel) => Object.entries(TYPES).map(([k, [l]]) => `<option value="${k}"${k === sel ? " selected" : ""}>${l}</option>`).join("");
+
 const SUG_GEV = {
   woonafdeling: [
     ["Textuur en slikken (IDDSI)", "Veel bewoners krijgen gemalen of gemixte maaltijden; overschotten daarvan zijn niet herbruikbaar."],
@@ -197,6 +207,15 @@ const SUG_GEV = {
     ["Porties en bestelling", "Bestelling bij de centrale keuken volgt vaste aantallen, niet de actuele bezetting (ziekenhuisopname, afwezigheid, overlijden)."],
     ["Timing en organisatie", "Maaltijden staan lang warm tot iedereen geholpen is; kwaliteit en appetijt dalen."],
     ["Personeel en communicatie", "Dieetwijzigingen of afwezigheden komen niet altijd tijdig bij de keuken terecht."],
+    ["Voedselveiligheid en regels", "Uitgeserveerd voedsel mag niet opnieuw aangeboden worden (HACCP, FAVV)."],
+  ],
+  patientenafdeling: [
+    ["Zorgprofiel en dieet", "Medicatie (bv. antipsychotica) beïnvloedt eetlust en gewicht; porties sluiten niet altijd aan."],
+    ["Eetlust en gezondheid", "Wisselende eetlust door psychische toestand; maaltijden worden soms overgeslagen of half gegeten."],
+    ["Porties en bestelling", "Opnames, ontslagen en verloven wisselen snel; de bestelling volgt de bezetting niet tijdig."],
+    ["Timing en organisatie", "Therapieën en activiteiten lopen over maaltijdtijden, waardoor patiënten later of niet eten."],
+    ["Smaak en gewoontes", "Patiënten eten buiten de maaltijden eigen voeding of snacks en laten de maaltijd staan."],
+    ["Personeel en communicatie", "Verlof, ontslag of afwezigheid op therapie wordt niet altijd aan de keuken doorgegeven."],
     ["Voedselveiligheid en regels", "Uitgeserveerd voedsel mag niet opnieuw aangeboden worden (HACCP, FAVV)."],
   ],
   restaurant: [
@@ -309,7 +328,7 @@ function renderNav() {
     if (!l.length) return "";
     return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`)).join("");
   };
-  $("#nav").innerHTML = btn("overzicht", "Overzicht site") + groep("woonafdeling", "Woonafdelingen") + groep("restaurant", "Restaurants") + groep("andere", "Andere") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer");
+  $("#nav").innerHTML = btn("overzicht", "Overzicht site") + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer");
   $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
 }
 
@@ -346,7 +365,7 @@ function renderOverzicht(main) {
         <thead><tr><th>Afdeling</th><th style="text-align:right">Bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Gemiddelde verspilling per plaats per meetdag">Per plaats/dag</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
-            <td><b>${esc(a.naam)}</b><br><span class="hint">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere"}</span></td>
+            <td><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></td>
             <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
             <td class="num">${kg(k)}</td>
             <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
@@ -379,7 +398,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Afdeling"} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
     <div class="stats">
       <div class="stat"><b>${kg(sum(msP))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
       <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per plaats`; })()}</span></div>
@@ -443,7 +462,7 @@ function tabGevoeligheden(body, a, gev, act) {
         <label>Bron<input id="gBron" placeholder="functie, geen naam (bv. hoofdverpleegkundige)"></label>
         <div class="full"><button class="primary" type="submit"${dis()}>Gevoeligheid opslaan</button></div>
       </form>
-      <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Vertrekpunten voor ${a.type === "restaurant" ? "een restaurant" : "een woonafdeling"}</div>
+      <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Vertrekpunten voor ${(TYPES[a.type] || TYPES.andere)[2]}</div>
       <div class="chips">${sug.map((s, i) => `<button type="button" data-sug="${i}">${esc(s[1])}</button>`).join("")}</div></div>
     </section>
     <section class="panel"><h3 style="margin-bottom:4px">Vastgelegde gevoeligheden</h3>
@@ -526,7 +545,7 @@ function beheerHtml() {
     <section class="panel"><h3 style="margin-bottom:10px">Afdeling toevoegen aan ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}</h3>
       <form class="f" id="fAfd">
         <label class="full">Naam<input id="bNaam" required placeholder="bv. Sint-Vincentius"></label>
-        <label>Type<select id="bType"><option value="woonafdeling">Woonafdeling</option><option value="restaurant">Restaurant</option><option value="andere">Andere</option></select></label>
+        <label>Type<select id="bType">${typeOpties(S.afdelingen.some((a) => a.siteId === ui.site && a.type === "patientenafdeling") ? "patientenafdeling" : "woonafdeling")}</select></label>
         <label>Volgorde<input type="number" id="bVolg" value="${afd.length + 1}"></label>
         <label>Plaatsen<input type="number" min="0" id="bCap" placeholder="leeg = wisselend"></label>
         <label>Kortverblijf<input type="number" min="0" id="bKv"></label>
@@ -543,8 +562,8 @@ function beheerHtml() {
       </form>
     </section>
   </div>
-  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde, bezetting of omschrijving aan; het wordt bewaard zodra je het veld verlaat. Laat de plaatsen leeg als het aantal eters wisselt.</p>
-    ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-naam="${esc(a.id)}" value="${esc(a.naam)}" aria-label="Naam ${esc(a.naam)}"${dis()} style="flex:1 1 12rem;font-weight:700"><input type="number" data-volg="${esc(a.id)}" value="${esc(a.volgorde ?? "")}" aria-label="Volgorde ${esc(a.naam)}" title="Volgorde"${dis()} style="width:5rem"><span class="hint">${esc(a.type)}</span></div>
+  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde, type, bezetting of omschrijving aan; het wordt bewaard zodra je het veld verlaat. Laat de plaatsen leeg als het aantal eters wisselt.</p>
+    ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-naam="${esc(a.id)}" value="${esc(a.naam)}" aria-label="Naam ${esc(a.naam)}"${dis()} style="flex:1 1 12rem;font-weight:700"><input type="number" data-volg="${esc(a.id)}" value="${esc(a.volgorde ?? "")}" aria-label="Volgorde ${esc(a.naam)}" title="Volgorde"${dis()} style="width:5rem"><select data-type="${esc(a.id)}" aria-label="Type ${esc(a.naam)}"${dis()} style="width:auto">${typeOpties(a.type)}</select></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         <label class="hint" style="display:flex;gap:6px;align-items:center">Plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
         <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
@@ -592,6 +611,7 @@ function bindBeheer() {
     }, "Gegevens gewist");
     if (ok) $("#wBev").value = "";
   };
+  document.querySelectorAll("[data-type]").forEach((sel) => (sel.onchange = () => write(() => sb.from("vv_afdelingen").update({ type: sel.value }).eq("id", sel.dataset.type), "Type bewaard")));
   document.querySelectorAll("[data-naam]").forEach((inp) => (inp.onchange = () => { const v = inp.value.trim(); if (!v) { toast("Een afdeling heeft een naam nodig."); return; } write(() => sb.from("vv_afdelingen").update({ naam: v }).eq("id", inp.dataset.naam), "Naam bewaard"); }));
   document.querySelectorAll("[data-volg]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ volgorde: Number(inp.value) || 0 }).eq("id", inp.dataset.volg), "Volgorde bewaard")));
   const getal = (v) => (v === "" ? null : Math.max(0, Math.round(Number(v)) || 0));
@@ -684,7 +704,7 @@ async function exporteerVerslag(afdId) {
     const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
     const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
     const gp = gramPerPlaats(a, m);
-    return [a.naam, a.type === "restaurant" ? "Restaurant" : a.type === "woonafdeling" ? "Woonafdeling" : "Andere", bezettingTekst(a) || "wisselend", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
+    return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
   });
   const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per plaats per meetdag (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
   rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(12), XL.focus[focusInfo(afd[k])[0]]));

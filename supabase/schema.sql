@@ -19,7 +19,7 @@ create table if not exists public.vv_sites (
   aangemaakt timestamptz not null default now()
 );
 
--- "type": woonafdeling, restaurant of andere.
+-- "type": woonafdeling, patientenafdeling, restaurant of andere.
 create table if not exists public.vv_afdelingen (
   id text primary key,
   site_id text not null references public.vv_sites(id),
