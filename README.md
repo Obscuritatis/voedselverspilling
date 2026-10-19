@@ -21,6 +21,8 @@ Sint-Franciscus, restaurant Gozewijn (medewerkers) en het Prieeltje (buurtrestau
 Tweede site: WZC Sint-Alexius, met Daalborn, Veldborn, Minneborn, Germanusborn, De Varen, het
 dagverzorgingscentrum en het buurtrestaurant (in het LDC).
 
+Derde site: WZC Passionisten, met Janneke, Mieken, Nieke, Tiske en het buurtrestaurant.
+
 Per afdeling staat de maximale bezetting (plaatsen + kortverblijven) en wie de aantallen aan de keuken doorgeeft.
 Met de bezetting rekent de app de verspilling per plaats per meetdag uit (in gram), zodat je afdelingen van
 verschillende grootte kan vergelijken. Bij afdelingen met een wisselend aantal eters blijft dat leeg.
@@ -38,7 +40,7 @@ en dezelfde aanmelding met een link per e-mail, maar eigen tabellen (`vv_sites`,
 
 1. **Database**: open in het bestaande Supabase-project *SQL Editor*, plak de inhoud van
    [`supabase/schema.sql`](supabase/schema.sql) en klik *Run*. Het script maakt enkel nieuwe onderdelen aan,
-   zet Huize Nazareth en Sint-Alexius met hun afdelingen klaar en mag opnieuw uitgevoerd worden (bv. na een update van de app).
+   zet Huize Nazareth, Sint-Alexius en Passionisten met hun afdelingen klaar en mag opnieuw uitgevoerd worden (bv. na een update van de app).
 2. **Toegang**: de app gebruikt dezelfde toegangslijst (`toegang`) als de veiligheidsrondes.
    Wie daar staat, kan ook de voedselverspilling zien en invullen. Iemand toevoegen:
    ```sql

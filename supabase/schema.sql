@@ -146,3 +146,15 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit,
   ('wzc-sint-alexius-dagverzorgingscentrum', 'wzc-sint-alexius', 'Dagverzorgingscentrum', 'andere', 6, null, null, 'Wisselt met wie deelneemt; de afdeling geeft de aanwezigen door aan de keuken.'),
   ('wzc-sint-alexius-buurtrestaurant', 'wzc-sint-alexius', 'Buurtrestaurant', 'restaurant', 7, null, null, 'In het LDC; Désirée Gerlofsma geeft de aantallen door aan de keuken.')
 on conflict (id) do nothing;
+
+-- Site WZC Passionisten (19/10/2026).
+insert into public.vv_sites (id, naam, volgorde) values
+  ('wzc-passionisten', 'WZC Passionisten', 3)
+on conflict (id) do nothing;
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde) values
+  ('wzc-passionisten-janneke', 'wzc-passionisten', 'Janneke', 'woonafdeling', 1),
+  ('wzc-passionisten-mieken', 'wzc-passionisten', 'Mieken', 'woonafdeling', 2),
+  ('wzc-passionisten-nieke', 'wzc-passionisten', 'Nieke', 'woonafdeling', 3),
+  ('wzc-passionisten-tiske', 'wzc-passionisten', 'Tiske', 'woonafdeling', 4),
+  ('wzc-passionisten-buurtrestaurant', 'wzc-passionisten', 'Buurtrestaurant', 'restaurant', 5)
+on conflict (id) do nothing;
