@@ -158,3 +158,8 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde) values
   ('wzc-passionisten-tiske', 'wzc-passionisten', 'Tiske', 'woonafdeling', 4),
   ('wzc-passionisten-buurtrestaurant', 'wzc-passionisten', 'Buurtrestaurant', 'restaurant', 5)
 on conflict (id) do nothing;
+
+-- Site Psychiatrisch ziekenhuis (19/10/2026). De afdelingen worden in de app toegevoegd (Beheer).
+insert into public.vv_sites (id, naam, volgorde) values
+  ('psychiatrisch-ziekenhuis', 'Psychiatrisch ziekenhuis', 4)
+on conflict (id) do nothing;
