@@ -34,7 +34,7 @@ De app is een statische pagina (GitHub Pages), gebouwd op dezelfde basis als
 [veiligheidsrondes](https://github.com/Obscuritatis/veiligheidsrondes) en
 [staalnamen](https://github.com/Obscuritatis/staalnamen). Ze gebruikt hetzelfde Supabase-project
 en dezelfde aanmelding met een link per e-mail, maar eigen tabellen (`vv_sites`, `vv_afdelingen`,
-`vv_metingen`, `vv_gevoeligheden`, `vv_acties`). De gegevens van de andere apps worden niet aangeraakt.
+`vv_metingen`, `vv_maaltijden`, `vv_gevoeligheden`, `vv_acties`). De gegevens van de andere apps worden niet aangeraakt.
 
 ## Eenmalige opzet
 

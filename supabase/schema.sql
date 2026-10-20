@@ -85,16 +85,32 @@ create table if not exists public.vv_acties (
 );
 create index if not exists vv_acties_afdeling_idx on public.vv_acties(afdeling_id);
 
+-- Geleverde porties en aanwezigen per afdeling, datum en maaltijd (één keer, los van de wegingen).
+create table if not exists public.vv_maaltijden (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  afdeling_id text not null references public.vv_afdelingen(id),
+  datum date not null default current_date,
+  maaltijd text not null default 'Middagmaal',
+  porties integer check (porties >= 0),
+  aanwezig integer check (aanwezig >= 0),
+  opmerking text not null default '',
+  aangemaakt timestamptz not null default now(),
+  aangemaakt_door uuid default auth.uid(),
+  unique (afdeling_id, datum, maaltijd)
+);
+
 alter table public.vv_sites enable row level security;
 alter table public.vv_afdelingen enable row level security;
 alter table public.vv_metingen enable row level security;
 alter table public.vv_gevoeligheden enable row level security;
 alter table public.vv_acties enable row level security;
+alter table public.vv_maaltijden enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties'] loop
+  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties', 'vv_maaltijden'] loop
     execute format('drop policy if exists %I on public.%I', t || ' voor collega''s', t);
     execute format('create policy %I on public.%I for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang())', t || ' voor collega''s', t);
   end loop;
@@ -104,7 +120,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties'] loop
+  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties', 'vv_maaltijden'] loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     exception when duplicate_object then null;
