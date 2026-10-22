@@ -1,0 +1,736 @@
+const STROMEN = {
+  bordrest: "Bordresten",
+  overproductie: "Overproductie (niet uitgeserveerd)",
+  bederf: "Bederf of vervallen voorraad",
+  bereiding: "Bereidingsverlies",
+};
+const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
+const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Tussendoortje", "Hele dag"];
+const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
+const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
+const NIVEAU = ["laag", "midden", "hoog"];
+
+// Vertrekpunten, geen geregistreerde gegevens: klik om een formulier voor te vullen.
+// Soorten afdelingen: [label, meervoud voor de navigatie, "een ..." voor de vertrekpunten].
+const TYPES = {
+  woonafdeling: ["Woonafdeling", "Woonafdelingen", "een woonafdeling"],
+  patientenafdeling: ["Patiëntenafdeling", "Patiëntenafdelingen", "een patiëntenafdeling"],
+  restaurant: ["Restaurant", "Restaurants", "een restaurant"],
+  andere: ["Andere", "Andere", "een afdeling"],
+};
+const typeNaam = (t) => (TYPES[t] || TYPES.andere)[0];
+const typeOpties = (sel) => Object.entries(TYPES).map(([k, [l]]) => `<option value="${k}"${k === sel ? " selected" : ""}>${l}</option>`).join("");
+
+const SUG_GEV = {
+  woonafdeling: [
+    ["Textuur en slikken (IDDSI)", "Veel bewoners krijgen gemalen of gemixte maaltijden; overschotten daarvan zijn niet herbruikbaar."],
+    ["Eetlust en gezondheid", "Wisselende eetlust door ziekte, medicatie of palliatieve zorg; porties blijven vaak half op."],
+    ["Smaak en gewoontes", "Bewoners met dementie herkennen gemixte gerechten minder goed, waardoor ze minder eten."],
+    ["Porties en bestelling", "Bestelling bij de centrale keuken volgt vaste aantallen, niet de actuele bezetting (ziekenhuisopname, afwezigheid, overlijden)."],
+    ["Timing en organisatie", "Maaltijden staan lang warm tot iedereen geholpen is; kwaliteit en appetijt dalen."],
+    ["Personeel en communicatie", "Dieetwijzigingen of afwezigheden komen niet altijd tijdig bij de keuken terecht."],
+    ["Voedselveiligheid en regels", "Uitgeserveerd voedsel mag niet opnieuw aangeboden worden (HACCP, FAVV)."],
+  ],
+  patientenafdeling: [
+    ["Zorgprofiel en dieet", "Medicatie (bv. antipsychotica) beïnvloedt eetlust en gewicht; porties sluiten niet altijd aan."],
+    ["Eetlust en gezondheid", "Wisselende eetlust door psychische toestand; maaltijden worden soms overgeslagen of half gegeten."],
+    ["Porties en bestelling", "Opnames, ontslagen en verloven wisselen snel; de bestelling volgt de bezetting niet tijdig."],
+    ["Timing en organisatie", "Therapieën en activiteiten lopen over maaltijdtijden, waardoor patiënten later of niet eten."],
+    ["Smaak en gewoontes", "Patiënten eten buiten de maaltijden eigen voeding of snacks en laten de maaltijd staan."],
+    ["Personeel en communicatie", "Verlof, ontslag of afwezigheid op therapie wordt niet altijd aan de keuken doorgegeven."],
+    ["Voedselveiligheid en regels", "Uitgeserveerd voedsel mag niet opnieuw aangeboden worden (HACCP, FAVV)."],
+  ],
+  restaurant: [
+    ["Bezoekers en vraag", "Het aantal eters schommelt sterk per dag (diensten, vakanties, weer, activiteiten)."],
+    ["Porties en bestelling", "Eén vaste portiegrootte past niet bij elke gast."],
+    ["Bezoekers en vraag", "Gasten verwachten keuze tot sluitingstijd, wat aan het einde van de service tot overschot leidt."],
+    ["Voedselveiligheid en regels", "Warm buffet: resten na de service mogen niet terug in de koeling."],
+    ["Smaak en gewoontes", "Bepaalde componenten (groenten, saus) komen telkens terug op de borden."],
+  ],
+};
+const SUG_ACT = [
+  ["Bestelling dagelijks afstemmen op de bezetting", "Afwezigheden en dieetwijzigingen vóór 10 uur doorgeven aan de keuken.", "hoog", "laag"],
+  ["Kleinere basisportie met bijschep", "Standaard een kleinere portie opscheppen en actief een tweede portie aanbieden.", "hoog", "laag"],
+  ["Gemixt herkenbaar aanbieden", "Componenten apart en in vorm presenteren zodat bewoners het gerecht herkennen.", "midden", "midden"],
+  ["Wekelijks bordresten wegen", "Vaste weegmoment per week en de resultaten bespreken met keuken en team.", "midden", "laag"],
+  ["Voorkeuren per bewoner vastleggen", "Smaak, portiegrootte en gewoontes noteren in het zorgdossier of op de maaltijdkaart.", "midden", "midden"],
+  ["Inschrijven of reserveren op drukke dagen", "Gasten vragen zich vooraf aan te melden zodat de keuken juister kan plannen.", "hoog", "midden"],
+  ["Restaanbod aan het einde van de service", "Overschot aan een lagere prijs aanbieden of via een sociale partner verdelen.", "midden", "midden"],
+  ["Overschot verwerken in een volgende maaltijd", "Niet-uitgeserveerde componenten binnen de HACCP-regels verwerken in soep of dagschotel.", "midden", "laag"],
+];
+
+const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: [], maaltijden: [], loaded: {} };
+let sb = null, sessie = null, ready = false, canWrite = true;
+const ui = { site: null, view: "overzicht", tab: "metingen", periode: 30, prefillAct: null };
+try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode) ui.periode = s.periode; } catch (e) {}
+function saveUi() { try { localStorage.setItem("voedselverspilling-ui", JSON.stringify({ site: ui.site, periode: ui.periode })); } catch (e) {} }
+
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const kg = (n) => (Math.round(n * 10) / 10).toLocaleString("nl-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " kg";
+const today = () => new Date().toISOString().slice(0, 10);
+const fmtDate = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString("nl-BE", { day: "numeric", month: "short" }); } catch (e) { return d; } };
+const slug = (t) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "x";
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2400); }
+
+async function write(fn, okMsg) {
+  try {
+    const { error } = await fn();
+    if (error) throw error;
+    if (okMsg) toast(okMsg);
+    laadAlles();
+    return true;
+  } catch (e) {
+    console.error(e);
+    toast(e && (e.code === "42501" || /row-level security/i.test(e.message || "")) ? "Je hebt geen toegang om dit op te slaan."
+      : e && e.code === "23503" ? "Dit kan niet: er hangen nog gegevens aan vast."
+      : e && e.code === "23505" ? "Dit bestaat al."
+      : "Opslaan mislukt. Controleer je verbinding en probeer opnieuw.");
+    return false;
+  }
+}
+
+// ---------- afgeleide cijfers ----------
+function inPeriode(m) {
+  if (!ui.periode) return true;
+  const grens = new Date(); grens.setDate(grens.getDate() - ui.periode);
+  return m.datum >= grens.toISOString().slice(0, 10);
+}
+const siteAfd = () => S.afdelingen.filter((a) => a.siteId === ui.site).sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99) || a.naam.localeCompare(b.naam));
+const ofAfd = (list, id) => list.filter((x) => x.afdelingId === id);
+const sum = (arr) => arr.reduce((s, m) => s + (Number(m.kg) || 0), 0);
+function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[key]] || 0) + (Number(m.kg) || 0))); return Object.entries(g).sort((a, b) => b[1] - a[1]); }
+
+// Maximale bezetting: vaste plaatsen + kortverblijven. Leeg als de afdeling geen vaste bezetting heeft.
+const plaatsen = (a) => (Number(a.capaciteit) || 0) + (Number(a.kortverblijf) || 0);
+const bezettingTekst = (a) => a.capaciteit ? `${a.capaciteit}${a.kortverblijf ? ` + ${a.kortverblijf} kortverblijf` : ""}` : "";
+// Gemiddelde verspilling per plaats per meetdag, in gram.
+function gramPerPlaats(a, ms) {
+  const n = plaatsen(a), dagen = new Set(ms.map((m) => m.datum)).size;
+  return n && dagen ? (sum(ms) * 1000) / dagen / n : null;
+}
+const gram = (g) => Math.round(g).toLocaleString("nl-BE") + " g";
+// Aantallen per maaltijd (geleverde porties, aanwezigen): één rij per afdeling, datum en maaltijd.
+const maalKey = (x) => `${x.afdelingId}|${x.datum}|${x.maaltijd}`;
+function aantallenVan(afdId) { return S.maaltijden.filter((x) => x.afdelingId === afdId && inPeriode(x)); }
+// Verspilling per aanwezige (gram), enkel over maaltijden waarvoor de aanwezigen ingevuld zijn.
+function perAanwezige(afdId, ms) {
+  const mt = aantallenVan(afdId).filter((x) => Number(x.aanwezig) > 0);
+  if (!mt.length) return null;
+  const keys = new Set(mt.map(maalKey));
+  const k = sum(ms.filter((m) => keys.has(maalKey(m))));
+  const n = mt.reduce((t, x) => t + Number(x.aanwezig), 0);
+  return n ? (k * 1000) / n : null;
+}
+function portiesSaldo(afdId) {
+  const mt = aantallenVan(afdId).filter((x) => x.porties != null && x.aanwezig != null);
+  return mt.length ? { porties: mt.reduce((t, x) => t + Number(x.porties), 0), aanwezig: mt.reduce((t, x) => t + Number(x.aanwezig), 0) } : null;
+}
+
+function focusInfo(a) {
+  const ms = ofAfd(S.metingen, a.id).filter(inPeriode);
+  const gev = ofAfd(S.gevoeligheden, a.id);
+  const act = ofAfd(S.acties, a.id);
+  const zonder = gev.filter((g) => g.impact === "hoog" && !act.some((x) => x.gevoeligheidId === g.id && x.status !== "Afgerond"));
+  if (zonder.length) return ["hoog", `${zonder.length} hoge gevoeligheid${zonder.length > 1 ? "heden" : ""} zonder actie`];
+  if (!ms.length) return ["mute", "Start met meten"];
+  const top = groupKg(ms, "stroom")[0];
+  if (!act.some((x) => x.status === "Lopend" || x.status === "Gepland")) return ["midden", "Nog geen actie gepland"];
+  return ["ok", `Grootste stroom: ${(STROMEN[top[0]] || top[0]).split(" (")[0].toLowerCase()}`];
+}
+function focusFor(a) { const [cls, tekst] = focusInfo(a); return `<span class="pill p-${cls}">${esc(tekst)}</span>`; }
+
+// ---------- render ----------
+function render() {
+  const sites = [...S.sites].sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99));
+  if (!ui.site || !sites.some((s) => s.id === ui.site)) ui.site = sites[0]?.id || null;
+  $("#siteWrap").hidden = !sessie || !sites.length;
+  $("#siteSel").innerHTML = sites.map((s) => `<option value="${esc(s.id)}"${s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("") || `<option>Nog geen site</option>`;
+  renderNav();
+  const main = $("#main");
+  if (!sessie) { $("#nav").innerHTML = ""; main.innerHTML = viewLogin(); return; }
+  if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
+  if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
+  if (ui.view === "overzicht") renderOverzicht(main);
+  else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
+  else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
+}
+
+function renderNav() {
+  if (!sessie) return;
+  const afd = siteAfd();
+  const btn = (id, label, extra = "") => `<button data-view="${esc(id)}" aria-current="${ui.view === id}"><span>${esc(label)}</span>${extra}</button>`;
+  const groep = (type, titel) => {
+    const l = afd.filter((a) => a.type === type);
+    if (!l.length) return "";
+    return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`)).join("");
+  };
+  $("#nav").innerHTML = btn("overzicht", "Overzicht site") + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer");
+  $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
+}
+
+function periodeSeg() {
+  return `<div class="seg" role="group" aria-label="Periode">${[[7, "7 dagen"], [30, "30 dagen"], [90, "90 dagen"], [0, "Alles"]].map(([v, l]) => `<button data-per="${v}" aria-pressed="${ui.periode === v}">${l}</button>`).join("")}</div>`;
+}
+function bindPeriode(root) { root.querySelectorAll("[data-excel]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await exporteerVerslag(b.dataset.excel === "site" ? null : b.dataset.excel); } finally { b.disabled = false; } })); root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
+
+function barsHtml(entries, labelMap) {
+  if (!entries.length) return `<p class="hint">Nog geen metingen in deze periode.</p>`;
+  const max = entries[0][1] || 1;
+  return `<div class="bars">${entries.map(([k, v]) => `<div class="b"><span>${esc(labelMap ? labelMap[k] || k : k)}</span><div class="bar"><i style="width:${(v / max) * 100}%"></i></div><span class="num">${kg(v)}</span></div>`).join("")}</div>`;
+}
+
+function renderOverzicht(main) {
+  const site = S.sites.find((s) => s.id === ui.site);
+  const afd = siteAfd();
+  const ids = new Set(afd.map((a) => a.id));
+  const ms = S.metingen.filter((m) => ids.has(m.afdelingId) && inPeriode(m));
+  const gev = S.gevoeligheden.filter((g) => ids.has(g.afdelingId));
+  const act = S.acties.filter((a) => ids.has(a.afdelingId));
+  const maxKg = Math.max(1, ...afd.map((a) => sum(ofAfd(ms, a.id))));
+  main.innerHTML = `
+    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="site">Excel-verslag</button></div></div>
+    <div class="stats">
+      <div class="stat"><b>${kg(sum(ms))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
+      <div class="stat"><b>${ms.length}</b><span>metingen</span></div>
+      <div class="stat"><b>${gev.length}</b><span>gevoeligheden, ${gev.filter((g) => g.impact === "hoog").length} hoog</span></div>
+      <div class="stat"><b>${act.filter((a) => a.status === "Lopend" || a.status === "Gepland").length}</b><span>acties gepland of lopend</span></div>
+    </div>
+    <section class="panel">
+      <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
+          <tr class="click" data-open="${esc(a.id)}" tabindex="0">
+            <td><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></td>
+            <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
+            <td class="num">${kg(k)}</td>
+            <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
+            <td class="num">${(() => { const pa = perAanwezige(a.id, ofAfd(ms, a.id)); if (pa != null) return gram(pa); const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : `<span class="hint" title="per plaats per meetdag">${gram(g)}/plaats</span>`; })()}</td>
+            <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
+            <td class="nowrap">${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
+            <td class="focus">${focusFor(a)}</td>
+          </tr>`; }).join("") || `<tr><td colspan="8" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+      </table></div>
+    </section>
+    <div class="two">
+      <section class="panel"><h3 style="margin-bottom:12px">Per soort verlies</h3>${barsHtml(groupKg(ms, "stroom"), STROMEN)}</section>
+      <section class="panel"><h3 style="margin-bottom:12px">Per component</h3>${barsHtml(groupKg(ms, "component").slice(0, 6))}</section>
+    </div>`;
+  bindPeriode(main);
+  main.querySelectorAll("[data-open]").forEach((tr) => {
+    const go = () => { ui.view = tr.dataset.open; ui.tab = "metingen"; render(); window.scrollTo({ top: 0 }); };
+    tr.onclick = go; tr.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  });
+}
+
+function opts(list, sel) { return list.map((v) => `<option${v === sel ? " selected" : ""}>${esc(v)}</option>`).join(""); }
+function optsMap(map, sel) { return Object.entries(map).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v)}</option>`).join(""); }
+const dis = () => (canWrite ? "" : " disabled");
+
+function renderAfdeling(main, a) {
+  const ms = ofAfd(S.metingen, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || (y.aangemaakt || "").localeCompare(x.aangemaakt || ""));
+  const msP = ms.filter(inPeriode);
+  const gev = ofAfd(S.gevoeligheden, a.id).sort((x, y) => NIVEAU.indexOf(y.impact) - NIVEAU.indexOf(x.impact));
+  const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
+  const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
+  main.innerHTML = `
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
+    <div class="stats">
+      <div class="stat"><b>${kg(sum(msP))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
+      <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per plaats`; })()}</span></div>
+      <div class="stat"><b>${(() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })()}</b><span>per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · ${ps.porties} porties geleverd voor ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}</span></div>
+      <div class="stat"><b>${act.filter((x) => x.status !== "Afgerond").length}</b><span>open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden</span></div>
+    </div>
+    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${l}</button>`).join("")}</div>
+    <div id="tabbody"></div>`;
+  bindPeriode(main);
+  main.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.tab; render(); }));
+  const body = $("#tabbody");
+  if (ui.tab === "metingen") tabMetingen(body, a, ms, msP);
+  else if (ui.tab === "gevoeligheden") tabGevoeligheden(body, a, gev, act);
+  else tabActies(body, a, gev, act);
+}
+
+function tabMetingen(body, a, ms, msP) {
+  body.innerHTML = `<div class="two">
+    <section class="panel">
+      <h3 style="margin-bottom:10px">Meting toevoegen</h3>
+      <form class="f" id="fMeting">
+        <label>Datum<input type="date" id="mDatum" value="${esc(ui.mDatum || today())}" required></label>
+        <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, ui.mMaaltijd || "Middagmaal")}</select></label>
+        <div class="full eyebrow" style="margin-top:6px">Aantallen voor deze maaltijd, één keer</div>
+        <label>Geleverde porties<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
+        <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
+        <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" id="mAantBewaar"${dis()}>Aantallen bewaren</button><span class="hint" id="mAantInfo"></span></div>
+        <div class="full eyebrow" style="margin-top:6px">Weging per soort verlies en component</div>
+        <label class="full">Soort verlies<select id="mStroom">${optsMap(STROMEN, a.type === "restaurant" ? "overproductie" : "bordrest")}</select></label>
+        <label>Component<select id="mComp">${opts(COMPONENTEN, "Gemengd of onbekend")}</select></label>
+        <label>Gewicht (kg)<input type="number" id="mKg" min="0" step="0.1" inputmode="decimal" required placeholder="bv. 2,4"></label>
+        <label class="full">Opmerking<input id="mOpm" placeholder="bv. stoofvlees te taai, 3 bewoners in ziekenhuis"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Weging opslaan</button></div>
+      </form>
+      <p class="hint" style="margin-top:10px">Vul de porties en aanwezigen één keer per maaltijd in; ze worden ook bewaard bij de eerste weging. Weeg netto: trek het gewicht van bak of emmer af.</p>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:12px">Verdeling in deze periode</h3>${barsHtml(groupKg(msP, "stroom"), STROMEN)}<div style="height:16px"></div>${barsHtml(groupKg(msP, "component").slice(0, 5))}</section>
+  </div>
+  ${(() => {
+    const mt = ofAfd(S.maaltijden, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
+    if (!mt.length) return "";
+    return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Porties</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
+    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td><td class="num">${kg(k)}</td><td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
+    </tbody></table></div><p class="hint" style="margin-top:8px">Verschil = geleverde porties min aanwezigen. Een plus betekent porties te veel.</p></section>`;
+  })()}
+  <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente wegingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
+    ${ms.length ? `<div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th>Soort</th><th>Component</th><th style="text-align:right">Gewicht</th><th>Opmerking</th><th></th></tr></thead><tbody>
+    ${ms.slice(0, 40).map((m) => `<tr><td>${fmtDate(m.datum)}</td><td>${esc(m.maaltijd)}</td><td>${esc((STROMEN[m.stroom] || m.stroom).split(" (")[0])}</td><td>${esc(m.component)}</td><td class="num">${kg(Number(m.kg) || 0)}</td><td>${esc(m.opmerking)}</td><td>${canWrite ? `<button class="ghost" data-del="metingen/${esc(m.id)}" aria-label="Verwijder meting">Verwijder</button>` : ""}</td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty">Nog geen metingen voor ${esc(a.naam)}. Voeg hierboven de eerste toe.</div>`}
+  </section>`;
+  const wb = body.querySelector("[data-wis-afd]");
+  if (wb) wb.onclick = () => { ui.wisAfd = wb.dataset.wisAfd; ui.view = "beheer"; render(); window.scrollTo({ top: document.body.scrollHeight }); setTimeout(() => $("#wBev")?.focus(), 50); };
+  const huidig = () => S.maaltijden.find((x) => x.afdelingId === a.id && x.datum === ($("#mDatum").value || today()) && x.maaltijd === $("#mMaaltijd").value);
+  const vulAantallen = () => {
+    const h = huidig();
+    $("#mPorties").value = h?.porties ?? ""; $("#mAanwezig").value = h?.aanwezig ?? "";
+    $("#mAantInfo").textContent = h ? "Al ingevuld voor deze maaltijd; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
+  };
+  const getalOfNull = (v) => (v === "" || v == null ? null : Math.max(0, Math.round(Number(v)) || 0));
+  // Bewaart porties en aanwezigen als ze ingevuld en gewijzigd zijn. Geeft false bij een fout.
+  const bewaarAantallen = async (melding) => {
+    const porties = getalOfNull($("#mPorties").value), aanwezig = getalOfNull($("#mAanwezig").value), h = huidig();
+    if (porties == null && aanwezig == null) { if (melding) toast("Vul de geleverde porties of de aanwezigen in."); return true; }
+    if (h && h.porties === porties && h.aanwezig === aanwezig) { if (melding) toast("Aantallen zijn al bewaard."); return true; }
+    const rij = naarDb({ siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, porties, aanwezig });
+    return write(() => sb.from("vv_maaltijden").upsert(rij, { onConflict: "afdeling_id,datum,maaltijd" }), melding ? "Aantallen bewaard" : null);
+  };
+  vulAantallen();
+  $("#mDatum").onchange = () => { ui.mDatum = $("#mDatum").value; vulAantallen(); };
+  $("#mMaaltijd").onchange = () => { ui.mMaaltijd = $("#mMaaltijd").value; vulAantallen(); };
+  $("#mAantBewaar").onclick = () => bewaarAantallen(true);
+  $("#fMeting").onsubmit = async (e) => {
+    e.preventDefault();
+    const val = Number(String($("#mKg").value).replace(",", "."));
+    if (!(val > 0)) { toast("Vul een gewicht in groter dan 0 kg."); return; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, stroom: $("#mStroom").value, component: $("#mComp").value, kg: val, opmerking: $("#mOpm").value.trim() };
+    ui.mDatum = rec.datum; ui.mMaaltijd = rec.maaltijd;
+    if (!(await bewaarAantallen(false))) return;
+    if (await write(() => sb.from("vv_metingen").insert(naarDb(rec)), `Weging van ${kg(val)} opgeslagen`)) { $("#mKg").value = ""; $("#mOpm").value = ""; }
+  };
+  bindDeletes(body);
+}
+
+function tabGevoeligheden(body, a, gev, act) {
+  const sug = SUG_GEV[a.type] || [...SUG_GEV.woonafdeling, ...SUG_GEV.restaurant];
+  body.innerHTML = `<div class="two">
+    <section class="panel">
+      <h3 style="margin-bottom:6px">Gevoeligheid vastleggen</h3>
+      <p class="hint" style="margin-bottom:10px">Wat maakt verspilling op deze afdeling moeilijk te vermijden? Denk aan bewoners, organisatie en regels.</p>
+      <form class="f" id="fGev">
+        <label class="full">Categorie<select id="gCat">${opts(CATEGORIEEN)}</select></label>
+        <label class="full">Omschrijving<textarea id="gOms" required placeholder="bv. 8 van de 28 bewoners krijgen gemixte voeding"></textarea></label>
+        <label>Impact op verspilling<select id="gImp">${opts(NIVEAU, "midden")}</select></label>
+        <label>Bron<input id="gBron" placeholder="functie, geen naam (bv. hoofdverpleegkundige)"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Gevoeligheid opslaan</button></div>
+      </form>
+      <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Vertrekpunten voor ${(TYPES[a.type] || TYPES.andere)[2]}</div>
+      <div class="chips">${sug.map((s, i) => `<button type="button" data-sug="${i}">${esc(s[1])}</button>`).join("")}</div></div>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:4px">Vastgelegde gevoeligheden</h3>
+      ${gev.length ? `<div class="list">${gev.map((g) => { const gekoppeld = act.filter((x) => x.gevoeligheidId === g.id); return `<div class="item">
+        <div><div class="meta"><span class="pill p-${esc(g.impact)}">${esc(g.impact)}</span><span>${esc(g.categorie)}</span>${g.bron ? `<span>· ${esc(g.bron)}</span>` : ""}</div><p>${esc(g.omschrijving)}</p>
+        <div class="meta" style="margin-top:4px">${gekoppeld.length ? gekoppeld.map((x) => `<span class="pill p-mute">${esc(x.status)}: ${esc(x.titel)}</span>`).join("") : `<span>Nog geen actie</span>`}</div></div>
+        <div class="side">${canWrite ? `<button data-act="${esc(g.id)}">Actie</button><button class="ghost" data-del="gevoeligheden/${esc(g.id)}" aria-label="Verwijder gevoeligheid">✕</button>` : ""}</div></div>`; }).join("")}</div>`
+      : `<div class="empty">Nog geen gevoeligheden voor ${esc(a.naam)}. Kies een vertrekpunt links of schrijf er zelf een.</div>`}
+    </section></div>`;
+  body.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => { const s = sug[Number(b.dataset.sug)]; $("#gCat").value = s[0]; $("#gOms").value = s[1]; $("#gOms").focus(); }));
+  body.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { ui.prefillAct = b.dataset.act; ui.tab = "acties"; render(); }));
+  $("#fGev").onsubmit = async (e) => {
+    e.preventDefault();
+    const oms = $("#gOms").value.trim();
+    if (!oms) { toast("Schrijf kort wat de gevoeligheid is."); return; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, categorie: $("#gCat").value, omschrijving: oms, impact: $("#gImp").value, bron: $("#gBron").value.trim() };
+    if (await write(() => sb.from("vv_gevoeligheden").insert(naarDb(rec)), "Gevoeligheid opgeslagen")) { $("#gOms").value = ""; $("#gBron").value = ""; }
+  };
+  bindDeletes(body);
+}
+
+function tabActies(body, a, gev, act) {
+  const pre = ui.prefillAct;
+  const cell = (imp, insp) => act.filter((x) => x.status !== "Afgerond" && (x.impact === "hoog") === imp && (x.inspanning === "laag") === insp);
+  const mx = (t, l) => `<div><h4>${t}</h4>${l.length ? `<ul>${l.map((x) => `<li>${esc(x.titel)}</li>`).join("")}</ul>` : `<p class="hint">Geen</p>`}</div>`;
+  body.innerHTML = `<div class="two">
+    <section class="panel">
+      <h3 style="margin-bottom:10px">Actie toevoegen</h3>
+      <form class="f" id="fAct">
+        <label class="full">Titel<input id="aTit" required placeholder="bv. Kleinere basisportie met bijschep"></label>
+        <label class="full">Wat houdt het in<textarea id="aOms"></textarea></label>
+        <label class="full">Pakt deze gevoeligheid aan<select id="aGev"><option value="">Geen specifieke</option>${gev.map((g) => `<option value="${esc(g.id)}"${g.id === pre ? " selected" : ""}>${esc(g.omschrijving.slice(0, 70))}</option>`).join("")}</select></label>
+        <label>Verwachte impact<select id="aImp">${opts(NIVEAU, "midden")}</select></label>
+        <label>Inspanning<select id="aInsp">${opts(NIVEAU, "midden")}</select></label>
+        <label>Status<select id="aStat">${opts(STATUS, "Idee")}</select></label>
+        <label>Trekker<input id="aEig" placeholder="functie, geen naam (bv. teamleider)"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Actie opslaan</button></div>
+      </form>
+      <div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Bewezen acties om mee te starten</div>
+      <div class="chips">${SUG_ACT.map((s, i) => `<button type="button" data-sa="${i}">${esc(s[0])}</button>`).join("")}</div></div>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:10px">Prioriteren</h3>
+      <div class="matrix">${mx("Snel resultaat: hoge impact, lage inspanning", cell(true, true))}${mx("Project: hoge impact, meer inspanning", cell(true, false))}${mx("Meenemen: lagere impact, lage inspanning", cell(false, true))}${mx("Herbekijken: lagere impact, meer inspanning", cell(false, false))}</div>
+    </section></div>
+  <section class="panel" style="margin-top:24px"><h3 style="margin-bottom:4px">Acties op ${esc(a.naam)}</h3>
+    ${act.length ? `<div class="list">${act.map((x) => { const g = gev.find((y) => y.id === x.gevoeligheidId); return `<div class="item">
+      <div><div class="meta"><span class="pill p-${x.status === "Afgerond" ? "ok" : x.status === "Lopend" ? "midden" : "mute"}">${esc(x.status)}</span><span>impact ${esc(x.impact)} · inspanning ${esc(x.inspanning)}</span>${x.eigenaar ? `<span>· ${esc(x.eigenaar)}</span>` : ""}</div>
+      <p><b>${esc(x.titel)}</b></p>${x.omschrijving ? `<p class="hint">${esc(x.omschrijving)}</p>` : ""}${g ? `<p class="hint">Voor: ${esc(g.omschrijving)}</p>` : ""}</div>
+      <div class="side">${canWrite ? `<select data-stat="${esc(x.id)}" aria-label="Status">${opts(STATUS, x.status)}</select><button class="ghost" data-del="acties/${esc(x.id)}" aria-label="Verwijder actie">✕</button>` : ""}</div></div>`; }).join("")}</div>`
+    : `<div class="empty">Nog geen acties voor ${esc(a.naam)}. Start met een bewezen actie of koppel er een aan een gevoeligheid.</div>`}
+  </section>`;
+  if (pre) { const g = gev.find((y) => y.id === pre); if (g) $("#aTit").focus(); }
+  body.querySelectorAll("[data-sa]").forEach((b) => (b.onclick = () => { const s = SUG_ACT[Number(b.dataset.sa)]; $("#aTit").value = s[0]; $("#aOms").value = s[1]; $("#aImp").value = s[2]; $("#aInsp").value = s[3]; $("#aTit").focus(); }));
+  body.querySelectorAll("[data-stat]").forEach((s) => (s.onchange = () => write(() => sb.from("vv_acties").update({ status: s.value, gewijzigd: new Date().toISOString() }).eq("id", s.dataset.stat), "Status bijgewerkt")));
+  $("#fAct").onsubmit = async (e) => {
+    e.preventDefault();
+    const tit = $("#aTit").value.trim();
+    if (!tit) { toast("Geef de actie een titel."); return; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, titel: tit, omschrijving: $("#aOms").value.trim(), gevoeligheidId: $("#aGev").value || null, impact: $("#aImp").value, inspanning: $("#aInsp").value, status: $("#aStat").value, eigenaar: $("#aEig").value.trim() };
+    if (await write(() => sb.from("vv_acties").insert(naarDb(rec)), "Actie opgeslagen")) { ui.prefillAct = null; }
+  };
+  bindDeletes(body);
+}
+
+const pendingDel = new Set();
+function bindDeletes(root) {
+  root.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => {
+    const p = b.dataset.del;
+    if (!pendingDel.has(p)) { pendingDel.add(p); b.textContent = "Zeker?"; b.style.color = "var(--red)"; setTimeout(() => { pendingDel.delete(p); if (b.isConnected) { b.textContent = b.getAttribute("aria-label").startsWith("Verwijder meting") ? "Verwijder" : "✕"; b.style.color = ""; } }, 3000); return; }
+    pendingDel.delete(p);
+    const [tabel, id] = p.split("/");
+    write(() => sb.from("vv_" + tabel).delete().eq("id", id), "Verwijderd");
+  }));
+}
+
+function beheerHtml() {
+  const afd = siteAfd();
+  return `<div class="row-head"><div><div class="eyebrow">Beheer</div><h2>Sites en afdelingen</h2></div></div>
+  <div class="two">
+    <section class="panel"><h3 style="margin-bottom:10px">Afdeling toevoegen aan ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}</h3>
+      <form class="f" id="fAfd">
+        <label class="full">Naam<input id="bNaam" required placeholder="bv. Sint-Vincentius"></label>
+        <label>Type<select id="bType">${typeOpties(S.afdelingen.some((a) => a.siteId === ui.site && a.type === "patientenafdeling") ? "patientenafdeling" : "woonafdeling")}</select></label>
+        <label>Volgorde<input type="number" id="bVolg" value="${afd.length + 1}"></label>
+        <label>Plaatsen<input type="number" min="0" id="bCap" placeholder="leeg = wisselend"></label>
+        <label>Kortverblijf<input type="number" min="0" id="bKv"></label>
+        <label class="full">Wie geeft de aantallen door<input id="bInfo" placeholder="functie, geen naam (bv. de afdeling zelf)"></label>
+        <label class="full">Omschrijving<input id="bOms" placeholder="bv. 30 bewoners, maaltijden uit centrale keuken"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}${S.sites.length ? "" : " disabled"}>Afdeling toevoegen</button></div>
+      </form>
+    </section>
+    <section class="panel"><h3 style="margin-bottom:10px">Nieuwe site</h3>
+      <p class="hint" style="margin-bottom:10px">Elke site krijgt dezelfde structuur: afdelingen, metingen, gevoeligheden en acties.</p>
+      <form class="f" id="fSite">
+        <label class="full">Naam van de site<input id="sNaam" required placeholder="bv. WZC De Linde"></label>
+        <div class="full"><button class="primary" type="submit"${dis()}>Site toevoegen</button></div>
+      </form>
+    </section>
+  </div>
+  <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde, type, bezetting of omschrijving aan; het wordt bewaard zodra je het veld verlaat. Laat de plaatsen leeg als het aantal eters wisselt.</p>
+    ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-naam="${esc(a.id)}" value="${esc(a.naam)}" aria-label="Naam ${esc(a.naam)}"${dis()} style="flex:1 1 12rem;font-weight:700"><input type="number" data-volg="${esc(a.id)}" value="${esc(a.volgorde ?? "")}" aria-label="Volgorde ${esc(a.naam)}" title="Volgorde"${dis()} style="width:5rem"><select data-type="${esc(a.id)}" aria-label="Type ${esc(a.naam)}"${dis()} style="width:auto">${typeOpties(a.type)}</select></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
+        <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
+      </div>
+      <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
+      <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
+    <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
+  </section>
+  <section class="panel"><h3 style="margin-bottom:6px">Gegevens wissen</h3>
+    <p class="hint" style="margin-bottom:10px">Handig na een test: wist in één keer de gegevens van één afdeling of van heel ${esc(S.sites.find((s) => s.id === ui.site)?.naam || "deze site")}. De afdelingen zelf blijven staan. Dit kan je niet ongedaan maken.</p>
+    <form class="f" id="fWis">
+      <label>Van<select id="wVan"><option value="">Heel de site</option>${afd.map((a) => `<option value="${esc(a.id)}"${ui.wisAfd === a.id ? " selected" : ""}>${esc(a.naam)}</option>`).join("")}</select></label>
+      <label>Wat wissen<select id="wWat"><option value="alles">Metingen, gevoeligheden en acties</option><option value="metingen"${ui.wisAfd ? " selected" : ""}>Enkel metingen (wegingen en aantallen)</option></select></label>
+      <label class="full">Typ WISSEN om te bevestigen<input id="wBev" autocomplete="off"></label>
+      <div class="full"><button type="submit" style="color:var(--red);border-color:var(--red)"${dis()}>Gegevens wissen</button></div>
+    </form>
+  </section>`;
+}
+function bindBeheer() {
+  const fa = $("#fAfd"), fs = $("#fSite");
+  if (fa) fa.onsubmit = async (e) => {
+    e.preventDefault();
+    const naam = $("#bNaam").value.trim(); if (!naam) return;
+    const id = slug(ui.site + "-" + naam);
+    const rec = { siteId: ui.site, naam, type: $("#bType").value, volgorde: Number($("#bVolg").value) || 99, omschrijving: $("#bOms").value.trim(),
+      capaciteit: $("#bCap").value === "" ? null : Number($("#bCap").value), kortverblijf: $("#bKv").value === "" ? null : Number($("#bKv").value), aantallenInfo: $("#bInfo").value.trim() };
+    if (await write(() => sb.from("vv_afdelingen").insert({ id, ...naarDb(rec) }), `${naam} toegevoegd`)) { ["#bNaam", "#bOms", "#bCap", "#bKv", "#bInfo"].forEach((k) => ($(k).value = "")); }
+  };
+  if (fs) fs.onsubmit = async (e) => {
+    e.preventDefault();
+    const naam = $("#sNaam").value.trim(); if (!naam) return;
+    const id = slug(naam);
+    if (await write(() => sb.from("vv_sites").insert({ id, naam, volgorde: S.sites.length + 1 }), `${naam} toegevoegd`)) { ui.site = id; saveUi(); ui.view = "beheer"; }
+  };
+  const fw = $("#fWis");
+  if (fw) fw.onsubmit = async (e) => {
+    e.preventDefault();
+    if ($("#wBev").value.trim().toUpperCase() !== "WISSEN") { toast("Typ WISSEN om te bevestigen."); return; }
+    const tabellen = $("#wWat").value === "metingen" ? ["vv_metingen", "vv_maaltijden"] : ["vv_acties", "vv_gevoeligheden", "vv_metingen", "vv_maaltijden"];
+    const ok = await write(async () => {
+      const van = $("#wVan").value;
+      for (const t of tabellen) { const r = await (van ? sb.from(t).delete().eq("afdeling_id", van) : sb.from(t).delete().eq("site_id", ui.site)); if (r.error) return r; }
+      return { error: null };
+    }, "Gegevens gewist");
+    if (ok) $("#wBev").value = "";
+  };
+  document.querySelectorAll("[data-type]").forEach((sel) => (sel.onchange = () => write(() => sb.from("vv_afdelingen").update({ type: sel.value }).eq("id", sel.dataset.type), "Type bewaard")));
+  document.querySelectorAll("[data-naam]").forEach((inp) => (inp.onchange = () => { const v = inp.value.trim(); if (!v) { toast("Een afdeling heeft een naam nodig."); return; } write(() => sb.from("vv_afdelingen").update({ naam: v }).eq("id", inp.dataset.naam), "Naam bewaard"); }));
+  document.querySelectorAll("[data-volg]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ volgorde: Number(inp.value) || 0 }).eq("id", inp.dataset.volg), "Volgorde bewaard")));
+  const getal = (v) => (v === "" ? null : Math.max(0, Math.round(Number(v)) || 0));
+  document.querySelectorAll("[data-cap]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ capaciteit: getal(inp.value) }).eq("id", inp.dataset.cap), "Bezetting bewaard")));
+  document.querySelectorAll("[data-kv]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ kortverblijf: getal(inp.value) }).eq("id", inp.dataset.kv), "Kortverblijven bewaard")));
+  document.querySelectorAll("[data-info]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ aantallen_info: inp.value.trim() }).eq("id", inp.dataset.info), "Bewaard")));
+  document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
+  bindDeletes(document);
+}
+
+$("#siteSel").onchange = (e) => { ui.site = e.target.value; ui.view = "overzicht"; saveUi(); render(); };
+
+// ---------- Excel-verslag ----------
+const EXCELJS_URL = "vendor/exceljs-4.4.0.min.js";
+function laadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  return new Promise((ok, nok) => {
+    const sc = document.createElement("script");
+    sc.src = EXCELJS_URL; sc.onload = () => ok(window.ExcelJS); sc.onerror = nok;
+    document.head.appendChild(sc);
+  });
+}
+const XL = {
+  kop: "FF1D2A23", rand: { style: "thin", color: { argb: "FFDDE3DC" } },
+  impact: { hoog: ["FFF7E3DF", "FFB23B2E"], midden: ["FFF6ECD8", "FFA8741F"], laag: ["FFE3EBF4", "FF3B6390"] },
+  focus: { hoog: ["FFF7E3DF", "FFB23B2E"], midden: ["FFF6ECD8", "FFA8741F"], ok: ["FFE2EFE8", "FF2F6B55"], mute: ["FFF5F6F4", "FF5D6B62"] },
+  status: { Afgerond: ["FFE2EFE8", "FF2F6B55"], Lopend: ["FFF6ECD8", "FFA8741F"], Gepland: ["FFE3EBF4", "FF3B6390"], Idee: ["FFF5F6F4", "FF5D6B62"] },
+};
+const kleur = (cel, [bg, fg]) => { cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } }; cel.font = { bold: true, color: { argb: fg } }; };
+const kgNum = (n) => Math.round(n * 100) / 100;
+const fmtD = (iso) => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return `${d}/${m}/${y}`; };
+const prioriteit = (x) => (x.impact === "hoog" ? (x.inspanning === "laag" ? "Snel resultaat" : "Project") : (x.inspanning === "laag" ? "Meenemen" : "Herbekijken"));
+
+// Eén blad met titel, info-regels en een tabel. Geeft het rijnummer na de tabel terug.
+function tabel(ws, startRij, kolommen, rijen, opmaak) {
+  const kop = ws.getRow(startRij);
+  kolommen.forEach(([titel], i) => {
+    const c = kop.getCell(i + 1); c.value = titel;
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XL.kop } };
+    c.alignment = { vertical: "middle", wrapText: true };
+  });
+  kop.height = 28;
+  rijen.forEach((waarden, k) => {
+    const rij = ws.getRow(startRij + 1 + k);
+    rij.values = waarden;
+    rij.eachCell({ includeEmpty: true }, (c, nr) => {
+      if (nr > kolommen.length) return;
+      c.alignment = { vertical: "top", wrapText: true }; c.border = { top: XL.rand, bottom: XL.rand, left: XL.rand, right: XL.rand };
+      if (kolommen[nr - 1][2]) c.numFmt = kolommen[nr - 1][2];
+    });
+    if (opmaak) opmaak(rij, k);
+  });
+  if (!rijen.length) ws.getRow(startRij + 1).getCell(1).value = "Geen gegevens.";
+  return startRij + 1 + Math.max(1, rijen.length);
+}
+function blad(wb, naam, titel, info, breedtes) {
+  const ws = wb.addWorksheet(naam, { pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  ws.columns = breedtes.map((w) => ({ width: w }));
+  ws.getCell("A1").value = titel; ws.getCell("A1").font = { bold: true, size: 16 };
+  info.forEach(([k, v], i) => { const r = ws.getRow(2 + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; });
+  return { ws, start: 2 + info.length + 1 };
+}
+
+async function exporteerVerslag(afdId) {
+  let ExcelJS;
+  try { ExcelJS = await laadExcelJS(); } catch { toast("Excel-export kon niet geladen worden. Controleer je internetverbinding."); return; }
+  const site = S.sites.find((x) => x.id === ui.site);
+  const afd = siteAfd().filter((a) => !afdId || a.id === afdId);
+  const ids = new Set(afd.map((a) => a.id));
+  const naamVan = (id) => (S.afdelingen.find((a) => a.id === id) || { naam: id }).naam;
+  const ms = S.metingen.filter((m) => ids.has(m.afdelingId) && inPeriode(m)).sort((x, y) => (x.datum || "").localeCompare(y.datum || ""));
+  const gev = S.gevoeligheden.filter((g) => ids.has(g.afdelingId));
+  const act = S.acties.filter((x) => ids.has(x.afdelingId));
+  const onderwerp = afdId ? `${afd[0]?.naam || ""} (${site?.naam || ""})` : site?.naam || "";
+  const periodeTekst = ui.periode ? `Laatste ${ui.periode} dagen (vanaf ${fmtD(new Date(Date.now() - ui.periode * 864e5).toISOString())})` : "Alle metingen";
+  const info = [["Site", site?.naam || ""], ...(afdId ? [["Afdeling", afd[0]?.naam || ""]] : []), ["Periode", periodeTekst], ["Geëxporteerd op", new Date().toLocaleString("nl-BE")]];
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Voedselverspilling"; wb.created = new Date();
+
+  // Overzicht
+  const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 16, 12, 12, 14, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
+  const totKg = sum(ms);
+  const samen = [["Totaal verspild (kg)", kgNum(totKg)], ["Aantal metingen", ms.length], ["Gevoeligheden", `${gev.length}, waarvan ${gev.filter((g) => g.impact === "hoog").length} hoog`], ["Acties", `${act.filter((x) => x.status !== "Afgerond").length} open, ${act.filter((x) => x.status === "Afgerond").length} afgerond`]];
+  samen.forEach(([k, v], i) => { const r = o.ws.getRow(o.start + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: "left" }; });
+  let rij = o.start + samen.length + 1;
+  o.ws.getRow(rij).getCell(1).value = "Per afdeling"; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
+  const perAfd = afd.map((a) => {
+    const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
+    const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
+    const gp = gramPerPlaats(a, m), pa = perAanwezige(a.id, m), ps = portiesSaldo(a.id);
+    return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), ps ? ps.porties : "", ps ? ps.aanwezig : "", pa == null ? "" : Math.round(pa), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
+  });
+  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per plaats per meetdag (g)", , "0"], ["Porties geleverd"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
+  rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(15), XL.focus[focusInfo(afd[k])[0]]));
+  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = kgNum(totKg); t.getCell(4).numFmt = "0.0"; t.getCell(5).value = ms.length; t.font = { bold: true }; rij++; }
+  const verdeling = (titel, key, labels) => {
+    rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
+    const g = groupKg(ms, key);
+    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : "Component"], ["kg", , "0.0"], ["Aandeel", , "0%"]], g.map(([k, v]) => [labels ? labels[k] || k : k, kgNum(v), totKg ? v / totKg : 0]));
+  };
+  verdeling("Per soort verlies", "stroom", STROMEN);
+  verdeling("Per component", "component");
+
+  // Metingen
+  const m = blad(wb, "Metingen", "Metingen", info, [12, 20, 14, 30, 28, 12, 40]);
+  tabel(m.ws, m.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Soort verlies"], ["Component"], ["kg", , "0.0"], ["Opmerking"]],
+    ms.map((x) => [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, STROMEN[x.stroom] || x.stroom, x.component, kgNum(Number(x.kg) || 0), x.opmerking]));
+  if (ms.length) m.ws.autoFilter = { from: { row: m.start, column: 1 }, to: { row: m.start + ms.length, column: 7 } };
+  m.ws.views = [{ state: "frozen", ySplit: m.start }];
+
+  // Maaltijden (porties en aanwezigen)
+  const mts = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
+  const mb = blad(wb, "Maaltijden", "Maaltijden: porties en aanwezigen", info, [12, 20, 14, 12, 12, 12, 12, 16]);
+  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Porties"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
+    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }));
+  mb.ws.views = [{ state: "frozen", ySplit: mb.start }];
+
+  // Gevoeligheden
+  const gs = [...gev].sort((x, y) => naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || NIVEAU.indexOf(y.impact) - NIVEAU.indexOf(x.impact));
+  const g = blad(wb, "Gevoeligheden", "Gevoeligheden", info.filter(([k]) => k !== "Periode"), [20, 26, 10, 50, 18, 40]);
+  tabel(g.ws, g.start, [["Afdeling"], ["Categorie"], ["Impact"], ["Omschrijving"], ["Bron"], ["Acties"]],
+    gs.map((x) => [naamVan(x.afdelingId), x.categorie, x.impact, x.omschrijving, x.bron, act.filter((y) => y.gevoeligheidId === x.id).map((y) => `${y.titel} (${y.status})`).join("\n") || "Nog geen actie"]),
+    (r, k) => kleur(r.getCell(3), XL.impact[gs[k].impact] || XL.impact.laag));
+  g.ws.views = [{ state: "frozen", ySplit: g.start }];
+
+  // Acties
+  const as = [...act].sort((x, y) => naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
+  const a = blad(wb, "Acties", "Acties", info.filter(([k]) => k !== "Periode"), [20, 34, 11, 10, 11, 16, 18, 40, 40]);
+  tabel(a.ws, a.start, [["Afdeling"], ["Actie"], ["Status"], ["Impact"], ["Inspanning"], ["Prioriteit"], ["Trekker"], ["Wat houdt het in"], ["Voor gevoeligheid"]],
+    as.map((x) => [naamVan(x.afdelingId), x.titel, x.status, x.impact, x.inspanning, prioriteit(x), x.eigenaar, x.omschrijving, (gev.find((y) => y.id === x.gevoeligheidId) || {}).omschrijving || ""]),
+    (r, k) => { kleur(r.getCell(3), XL.status[as[k].status] || XL.status.Idee); kleur(r.getCell(4), XL.impact[as[k].impact] || XL.impact.laag); });
+  a.ws.views = [{ state: "frozen", ySplit: a.start }];
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const naam = `Voedselverspilling ${onderwerp} ${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+  const el = document.createElement("a");
+  el.href = URL.createObjectURL(blob); el.download = naam;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(el.href), 10000);
+  toast("Excel-verslag gedownload");
+}
+
+// ---------- opslag ----------
+const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties", maaltijden: "vv_maaltijden" };
+// Database gebruikt snake_case (site_id), de app camelCase (siteId).
+const vanDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]));
+const naarDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase()), v]));
+
+async function selectAlles(tabel) {
+  const uit = [];
+  for (let van = 0; ; van += 1000) {
+    const { data, error } = await sb.from(tabel).select("*").order("id").range(van, van + 999);
+    if (error) return { error };
+    uit.push(...data);
+    if (data.length < 1000) return { data: uit, error: null };
+  }
+}
+async function laadAlles() {
+  const keys = Object.keys(TABELLEN);
+  const res = await Promise.all(keys.map((k) => selectAlles(TABELLEN[k])));
+  // Zolang het SQL-script voor de aantallen niet gelopen heeft, werkt de rest van de app gewoon verder.
+  const mi = keys.indexOf("maaltijden"), zonderAantallen = !!res[mi].error && res.filter((r) => r.error).length === 1;
+  if (zonderAantallen) res[mi] = { data: [], error: null };
+  if (res.some((r) => r.error)) { banner("De gegevens konden niet geladen worden. Heb je toegang gekregen? Vraag het aan de beheerder."); return; }
+  banner(zonderAantallen ? "Porties en aanwezigen kunnen nog niet bewaard worden: voer eerst supabase/2026-10-20-maaltijden.sql uit in Supabase." : "");
+  keys.forEach((k, i) => (S[k] = (res[i].data || []).map(vanDb).map((r) => (r.kg != null ? { ...r, kg: Number(r.kg) } : r))));
+  ready = true;
+  renderSafe();
+}
+function banner(msg) { const b = $("#banner"); b.textContent = msg || ""; b.hidden = !msg; }
+
+// Niet opnieuw tekenen terwijl iemand een formulier invult; dat zou getypte tekst wissen.
+function renderSafe() {
+  const a = document.activeElement;
+  const typing = a && a.closest && a.closest("form") && a.matches("input, textarea") && a.value;
+  if (typing) { clearTimeout(renderSafe.t); renderSafe.t = setTimeout(renderSafe, 1500); return; }
+  render();
+}
+
+function viewLogin() {
+  if (!sb) return '<div class="empty">Laden…</div>';
+  return `<form class="panel login" id="fLogin">
+    <h2>Aanmelden</h2>
+    <p class="hint">Vul je e-mailadres in. Je krijgt een mail met een link om je aan te melden.</p>
+    <label>E-mailadres<input type="text" inputmode="email" autocomplete="email" id="lMail" required></label>
+    <div><button class="primary" type="submit">Stuur aanmeldlink</button></div>
+  </form>`;
+}
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "fLogin") return;
+  e.preventDefault();
+  const f = e.target, knop = f.querySelector("button[type=submit]");
+  const email = $("#lMail").value.trim();
+  if (!email) return;
+  knop.disabled = true;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } });
+  knop.disabled = false;
+  if (error) toast("Versturen mislukt: " + error.message);
+  else f.innerHTML = `<h2>Kijk in je mailbox</h2><p style="margin:0">We stuurden een aanmeldlink naar <strong>${esc(email)}</strong>. Open die link op dit toestel.</p>`;
+});
+$("#logout").onclick = () => sb.auth.signOut();
+
+let kanaal = null;
+function zetSessie(s) {
+  const was = !!sessie;
+  sessie = s;
+  $("#who").hidden = !s;
+  $("#who-mail").textContent = s ? s.user.email : "";
+  if (s && !was) {
+    laadAlles();
+    kanaal = sb.channel("voedselverspilling-wijzigingen");
+    Object.values(TABELLEN).forEach((table) => kanaal.on("postgres_changes", { event: "*", schema: "public", table }, () => laadAlles()));
+    kanaal.subscribe();
+  }
+  if (!s) { Object.keys(TABELLEN).forEach((k) => (S[k] = [])); ready = false; if (kanaal) { sb.removeChannel(kanaal); kanaal = null; } }
+  render();
+}
+
+render();
+(async () => {
+  const cfg = window.VOEDSELVERSPILLING_CONFIG || {};
+  if (!window.supabase || !cfg.supabaseUrl || !cfg.supabaseAnonKey) { banner("De app kon niet starten: de koppeling met de database ontbreekt (config.js)."); return; }
+  sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  const { data } = await sb.auth.getSession();
+  zetSessie(data.session);
+  sb.auth.onAuthStateChange((_ev, s) => { if (!!s !== !!sessie) zetSessie(s); else sessie = s; });
+  // Bij terugkeer naar de app (gsm) gegevens verversen.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && sessie) laadAlles(); });
+})();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// Eigen installatieknop (Chrome/Edge/Samsung Internet): verschijnt zodra de browser de app installeerbaar vindt.
+let installVraag = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installVraag = e; $("#installeer").hidden = false; });
+window.addEventListener("appinstalled", () => { installVraag = null; $("#installeer").hidden = true; toast("App geïnstalleerd"); });
+$("#installeer").addEventListener("click", async () => {
+  if (!installVraag) return;
+  installVraag.prompt();
+  await installVraag.userChoice.catch(() => {});
+  installVraag = null; $("#installeer").hidden = true;
+});
+// iPhone en iPad kennen geen installatieknop: toon één keer hoe het via Safari moet.
+(() => {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  let gezien = false; try { gezien = localStorage.getItem("voedselverspilling-ios-tip") === "1"; } catch (e) {}
+  if (ios && !standalone && !gezien) $("#ios-tip").hidden = false;
+  $("#ios-tip-weg").onclick = () => { $("#ios-tip").hidden = true; try { localStorage.setItem("voedselverspilling-ios-tip", "1"); } catch (e) {} };
+})();

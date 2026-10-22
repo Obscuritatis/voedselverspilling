@@ -61,3 +61,11 @@ De koppeling met Supabase staat in [`config.js`](config.js) (zelfde project als 
 - De gratis aanmeldmails van Supabase zijn beperkt in aantal per uur. Voor een grotere groep stel je
   een eigen mailserver in onder *Authentication > SMTP*.
 - Een gratis Supabase-project wordt gepauzeerd na een week zonder gebruik; je zet het terug aan in het dashboard.
+
+## Beveiliging
+
+- De app laadt niets van andere sites: lettertypes (`fonts/`), de Supabase-bibliotheek en ExcelJS (`vendor/`) staan in de repo zelf.
+- Een Content Security Policy in `index.html` laat enkel code van de site zelf toe en enkel verbindingen met het eigen Supabase-project.
+  Verandert het Supabase-adres in `config.js`, pas dan ook `connect-src` in die regel aan.
+- Wie gegevens mag zien of wijzigen, regelt de database (RLS met `heeft_toegang()`). De publishable sleutel in `config.js` geeft op zich geen toegang.
+- [`supabase/controle-beveiliging.sql`](supabase/controle-beveiliging.sql) toont, zonder iets te wijzigen, of RLS aan staat op elke tabel.
