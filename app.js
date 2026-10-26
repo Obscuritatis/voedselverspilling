@@ -4,6 +4,24 @@ const STROMEN = {
   bederf: "Bederf of vervallen voorraad",
   bereiding: "Bereidingsverlies",
 };
+// Lijn-iconen (24x24, kleur via currentColor).
+const ICON = {
+  bordrest: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M2.5 4v5M1 4v3.2a1.5 1.5 0 0 0 3 0V4"/>',
+  overproductie: '<path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4Z"/><path d="M2 10h20M9 6.5c0-1 1-1.5 1-2.5M13 6.5c0-1 1-1.5 1-2.5"/>',
+  bederf: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M9.5 13.5l5 4M14.5 13.5l-5 4"/>',
+  bereiding: '<path d="M14 4 4 14l3 3 10-10Z"/><path d="m17 7 3-3M10 20l2-2"/>',
+  weegschaal: '<path d="M5 20h14l-1.5-11h-11Z"/><circle cx="12" cy="6" r="2.5"/><path d="M12 12v2.5"/>',
+  mensen: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.5A5 5 0 0 1 21 19.5"/>',
+  kalender: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  vlag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  lamp: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3Z"/>',
+  blad: '<path d="M5 19c0-8 5-14 15-14 0 10-6 15-14 15"/><path d="M5 19 13 11"/>',
+  huis: '<path d="m3 11 9-7 9 7"/><path d="M5 10v10h14V10"/>',
+  tandwiel: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+  excel: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+};
+const icon = (n, cls = "ic") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n] || ""}</svg>`;
+const kort = (k) => (STROMEN[k] || k).split(" (")[0];
 const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
 const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Tussendoortje", "Hele dag"];
 const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
@@ -149,6 +167,7 @@ function render() {
   $("#siteSel").innerHTML = sites.map((s) => `<option value="${esc(s.id)}"${s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("") || `<option>Nog geen site</option>`;
   renderNav();
   const main = $("#main");
+  document.body.classList.toggle("uit", !sessie);
   if (!sessie) { $("#nav").innerHTML = ""; main.innerHTML = viewLogin(); return; }
   if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
   if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
@@ -160,13 +179,13 @@ function render() {
 function renderNav() {
   if (!sessie) return;
   const afd = siteAfd();
-  const btn = (id, label, extra = "") => `<button data-view="${esc(id)}" aria-current="${ui.view === id}"><span>${esc(label)}</span>${extra}</button>`;
+  const btn = (id, label, extra = "", voor = "") => `<button data-view="${esc(id)}" aria-current="${ui.view === id}"><span class="nl">${voor}<span>${esc(label)}</span></span>${extra}</button>`;
   const groep = (type, titel) => {
     const l = afd.filter((a) => a.type === type);
     if (!l.length) return "";
-    return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`)).join("");
+    return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`, `<i class="ndot d-${focusInfo(a)[0]}" title="${esc(focusInfo(a)[1])}"></i>`)).join("");
   };
-  $("#nav").innerHTML = btn("overzicht", "Overzicht site") + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer");
+  $("#nav").innerHTML = btn("overzicht", "Overzicht site", "", icon("huis")) + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer", "", icon("tandwiel"));
   $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
 }
 
@@ -176,10 +195,19 @@ function periodeSeg() {
 function bindPeriode(root) { root.querySelectorAll("[data-excel]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await exporteerVerslag(b.dataset.excel === "site" ? null : b.dataset.excel); } finally { b.disabled = false; } })); root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
 
 function barsHtml(entries, labelMap) {
-  if (!entries.length) return `<p class="hint">Nog geen metingen in deze periode.</p>`;
-  const max = entries[0][1] || 1;
-  return `<div class="bars">${entries.map(([k, v]) => `<div class="b"><span>${esc(labelMap ? labelMap[k] || k : k)}</span><div class="bar"><i style="width:${(v / max) * 100}%"></i></div><span class="num">${kg(v)}</span></div>`).join("")}</div>`;
+  if (!entries.length) return `<div class="leeg-mini">${icon("weegschaal")}<span>Nog geen wegingen in deze periode.</span></div>`;
+  const max = entries[0][1] || 1, st = labelMap === STROMEN;
+  return `<div class="bars">${entries.map(([k, v]) => `<div class="b${st ? ` s-${esc(k)}` : ""}"><span class="lbl">${st ? `<span class="dot-ic">${icon(k)}</span>` : ""}${esc(st ? kort(k) : labelMap ? labelMap[k] || k : k)}</span><div class="bar"><i style="width:${Math.max(3, (v / max) * 100)}%"></i></div><span class="num">${kg(v)}</span></div>`).join("")}</div>`;
 }
+// Ring met de verdeling per soort verlies; kleuren komen uit de CSS (--s-bordrest, ...).
+function donutHtml(entries) {
+  const tot = entries.reduce((t, [, v]) => t + v, 0);
+  if (!tot) return "";
+  let acc = 0;
+  const stops = entries.map(([k, v]) => { const a = (acc / tot) * 100; acc += v; return `var(--s-${k}, var(--accent)) ${a}% ${(acc / tot) * 100}%`; }).join(", ");
+  return `<div class="donut" style="background:conic-gradient(${stops})" role="img" aria-label="Verdeling per soort verlies"><div><b>${kg(tot)}</b><span>totaal</span></div></div>`;
+}
+const stat = (ic, waarde, label, cls = "") => `<div class="stat ${cls}"><span class="stat-ic">${icon(ic)}</span><div><b>${waarde}</b><span>${label}</span></div></div>`;
 
 function renderOverzicht(main) {
   const site = S.sites.find((s) => s.id === ui.site);
@@ -190,20 +218,20 @@ function renderOverzicht(main) {
   const act = S.acties.filter((a) => ids.has(a.afdelingId));
   const maxKg = Math.max(1, ...afd.map((a) => sum(ofAfd(ms, a.id))));
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="site">Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="site">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
-      <div class="stat"><b>${kg(sum(ms))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
-      <div class="stat"><b>${ms.length}</b><span>metingen</span></div>
-      <div class="stat"><b>${gev.length}</b><span>gevoeligheden, ${gev.filter((g) => g.impact === "hoog").length} hoog</span></div>
-      <div class="stat"><b>${act.filter((a) => a.status === "Lopend" || a.status === "Gepland").length}</b><span>acties gepland of lopend</span></div>
+      ${stat("weegschaal", kg(sum(ms)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
+      ${stat("kalender", ms.length, `wegingen op ${new Set(ms.map((m) => m.datum)).size} meetdagen`, "t-blue")}
+      ${stat("lamp", gev.length, `gevoeligheden, ${gev.filter((g) => g.impact === "hoog").length} hoog`, "t-amber")}
+      ${stat("vlag", act.filter((a) => a.status === "Lopend" || a.status === "Gepland").length, "acties gepland of lopend", "t-green")}
     </div>
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="afd-tabel">
         <thead><tr><th>Afdeling</th><th style="text-align:right">Bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
-            <td><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></td>
+            <td><div class="afd-cel"><i class="ndot d-${focusInfo(a)[0]}"></i><div><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></div></div></td>
             <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
             <td class="num">${kg(k)}</td>
             <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
@@ -215,7 +243,7 @@ function renderOverzicht(main) {
       </table></div>
     </section>
     <div class="two">
-      <section class="panel"><h3 style="margin-bottom:12px">Per soort verlies</h3>${barsHtml(groupKg(ms, "stroom"), STROMEN)}</section>
+      <section class="panel"><h3 style="margin-bottom:12px">Per soort verlies</h3><div class="verdeling">${donutHtml(groupKg(ms, "stroom"))}${barsHtml(groupKg(ms, "stroom"), STROMEN)}</div></section>
       <section class="panel"><h3 style="margin-bottom:12px">Per component</h3>${barsHtml(groupKg(ms, "component").slice(0, 6))}</section>
     </div>`;
   bindPeriode(main);
@@ -236,14 +264,14 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" data-excel="${esc(a.id)}">Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
-      <div class="stat"><b>${kg(sum(msP))}</b><span>verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}</span></div>
-      <div class="stat"><b>${msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–"}</b><span>gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per plaats`; })()}</span></div>
-      <div class="stat"><b>${(() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })()}</b><span>per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · ${ps.porties} porties geleverd voor ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}</span></div>
-      <div class="stat"><b>${act.filter((x) => x.status !== "Afgerond").length}</b><span>open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden</span></div>
+      ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
+      ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per plaats`; })()}`, "t-blue")}
+      ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · ${ps.porties} porties voor ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}`, "t-amber")}
+      ${stat("vlag", act.filter((x) => x.status !== "Afgerond").length, `open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden`, "t-green")}
     </div>
-    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${l}</button>`).join("")}</div>
+    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${icon({ metingen: "weegschaal", gevoeligheden: "lamp", acties: "vlag" }[k])}${l}</button>`).join("")}</div>
     <div id="tabbody"></div>`;
   bindPeriode(main);
   main.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.tab; render(); }));
@@ -256,24 +284,24 @@ function renderAfdeling(main, a) {
 function tabMetingen(body, a, ms, msP) {
   body.innerHTML = `<div class="two">
     <section class="panel">
-      <h3 style="margin-bottom:10px">Meting toevoegen</h3>
+      <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Nieuwe weging</h3><p class="hint">Netto gewicht, zonder bak of emmer.</p></div></div>
       <form class="f" id="fMeting">
         <label>Datum<input type="date" id="mDatum" value="${esc(ui.mDatum || today())}" required></label>
         <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, ui.mMaaltijd || "Middagmaal")}</select></label>
-        <div class="full eyebrow" style="margin-top:6px">Aantallen voor deze maaltijd, één keer</div>
+        <div class="full stap"><span>1</span>Aantallen voor deze maaltijd, één keer</div>
         <label>Geleverde porties<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
         <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
         <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" id="mAantBewaar"${dis()}>Aantallen bewaren</button><span class="hint" id="mAantInfo"></span></div>
-        <div class="full eyebrow" style="margin-top:6px">Weging per soort verlies en component</div>
-        <label class="full">Soort verlies<select id="mStroom">${optsMap(STROMEN, a.type === "restaurant" ? "overproductie" : "bordrest")}</select></label>
-        <label>Component<select id="mComp">${opts(COMPONENTEN, "Gemengd of onbekend")}</select></label>
-        <label>Gewicht (kg)<input type="number" id="mKg" min="0" step="0.1" inputmode="decimal" required placeholder="bv. 2,4"></label>
+        <div class="full stap"><span>2</span>Wat weeg je?</div>
+        <fieldset class="full tegels" aria-label="Soort verlies">${Object.keys(STROMEN).map((k) => `<label class="tegel s-${k}"><input type="radio" name="mStroom" value="${k}"${k === (ui.mStroom || (a.type === "restaurant" ? "overproductie" : "bordrest")) ? " checked" : ""}><span class="tegel-ic">${icon(k)}</span><span>${esc(kort(k))}</span></label>`).join("")}</fieldset>
+        <fieldset class="full chipkeuze" aria-label="Component">${COMPONENTEN.map((c) => `<label><input type="radio" name="mComp" value="${esc(c)}"${c === (ui.mComp || "Gemengd of onbekend") ? " checked" : ""}><span>${esc(c)}</span></label>`).join("")}</fieldset>
+        <div class="full stap"><span>3</span>Gewicht</div>
+        <label class="full kg-veld"><span class="sr">Gewicht in kg</span><input type="number" id="mKg" min="0" step="0.1" inputmode="decimal" required placeholder="0,0"><span class="eenheid">kg</span></label>
         <label class="full">Opmerking<input id="mOpm" placeholder="bv. stoofvlees te taai, 3 bewoners in ziekenhuis"></label>
-        <div class="full"><button class="primary" type="submit"${dis()}>Weging opslaan</button></div>
+        <div class="full"><button class="primary groot" type="submit"${dis()}>${icon("weegschaal")}Weging opslaan</button></div>
       </form>
-      <p class="hint" style="margin-top:10px">Vul de porties en aanwezigen één keer per maaltijd in; ze worden ook bewaard bij de eerste weging. Weeg netto: trek het gewicht van bak of emmer af.</p>
     </section>
-    <section class="panel"><h3 style="margin-bottom:12px">Verdeling in deze periode</h3>${barsHtml(groupKg(msP, "stroom"), STROMEN)}<div style="height:16px"></div>${barsHtml(groupKg(msP, "component").slice(0, 5))}</section>
+    <section class="panel"><h3 style="margin-bottom:12px">Verdeling in deze periode</h3><div class="verdeling">${donutHtml(groupKg(msP, "stroom"))}${barsHtml(groupKg(msP, "stroom"), STROMEN)}</div><div style="height:16px"></div>${barsHtml(groupKg(msP, "component").slice(0, 5))}</section>
   </div>
   ${(() => {
     const mt = ofAfd(S.maaltijden, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
@@ -284,8 +312,8 @@ function tabMetingen(body, a, ms, msP) {
   })()}
   <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente wegingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
     ${ms.length ? `<div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th>Soort</th><th>Component</th><th style="text-align:right">Gewicht</th><th>Opmerking</th><th></th></tr></thead><tbody>
-    ${ms.slice(0, 40).map((m) => `<tr><td>${fmtDate(m.datum)}</td><td>${esc(m.maaltijd)}</td><td>${esc((STROMEN[m.stroom] || m.stroom).split(" (")[0])}</td><td>${esc(m.component)}</td><td class="num">${kg(Number(m.kg) || 0)}</td><td>${esc(m.opmerking)}</td><td>${canWrite ? `<button class="ghost" data-del="metingen/${esc(m.id)}" aria-label="Verwijder meting">Verwijder</button>` : ""}</td></tr>`).join("")}
-    </tbody></table></div>` : `<div class="empty">Nog geen metingen voor ${esc(a.naam)}. Voeg hierboven de eerste toe.</div>`}
+    ${ms.slice(0, 40).map((m) => `<tr><td>${fmtDate(m.datum)}</td><td>${esc(m.maaltijd)}</td><td><span class="stroom-tag s-${esc(m.stroom)}">${icon(m.stroom)}${esc(kort(m.stroom))}</span></td><td>${esc(m.component)}</td><td class="num">${kg(Number(m.kg) || 0)}</td><td>${esc(m.opmerking)}</td><td>${canWrite ? `<button class="ghost" data-del="metingen/${esc(m.id)}" aria-label="Verwijder meting">Verwijder</button>` : ""}</td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty">${icon("weegschaal", "ic groot")}<b>Nog geen wegingen</b><span>Voeg hierboven de eerste weging voor ${esc(a.naam)} toe.</span></div>`}
   </section>`;
   const wb = body.querySelector("[data-wis-afd]");
   if (wb) wb.onclick = () => { ui.wisAfd = wb.dataset.wisAfd; ui.view = "beheer"; render(); window.scrollTo({ top: document.body.scrollHeight }); setTimeout(() => $("#wBev")?.focus(), 50); };
@@ -312,8 +340,8 @@ function tabMetingen(body, a, ms, msP) {
     e.preventDefault();
     const val = Number(String($("#mKg").value).replace(",", "."));
     if (!(val > 0)) { toast("Vul een gewicht in groter dan 0 kg."); return; }
-    const rec = { siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, stroom: $("#mStroom").value, component: $("#mComp").value, kg: val, opmerking: $("#mOpm").value.trim() };
-    ui.mDatum = rec.datum; ui.mMaaltijd = rec.maaltijd;
+    const rec = { siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, stroom: body.querySelector("input[name=mStroom]:checked")?.value || "bordrest", component: body.querySelector("input[name=mComp]:checked")?.value || "Gemengd of onbekend", kg: val, opmerking: $("#mOpm").value.trim() };
+    ui.mDatum = rec.datum; ui.mMaaltijd = rec.maaltijd; ui.mStroom = rec.stroom; ui.mComp = rec.component;
     if (!(await bewaarAantallen(false))) return;
     if (await write(() => sb.from("vv_metingen").insert(naarDb(rec)), `Weging van ${kg(val)} opgeslagen`)) { $("#mKg").value = ""; $("#mOpm").value = ""; }
   };
@@ -341,7 +369,7 @@ function tabGevoeligheden(body, a, gev, act) {
         <div><div class="meta"><span class="pill p-${esc(g.impact)}">${esc(g.impact)}</span><span>${esc(g.categorie)}</span>${g.bron ? `<span>· ${esc(g.bron)}</span>` : ""}</div><p>${esc(g.omschrijving)}</p>
         <div class="meta" style="margin-top:4px">${gekoppeld.length ? gekoppeld.map((x) => `<span class="pill p-mute">${esc(x.status)}: ${esc(x.titel)}</span>`).join("") : `<span>Nog geen actie</span>`}</div></div>
         <div class="side">${canWrite ? `<button data-act="${esc(g.id)}">Actie</button><button class="ghost" data-del="gevoeligheden/${esc(g.id)}" aria-label="Verwijder gevoeligheid">✕</button>` : ""}</div></div>`; }).join("")}</div>`
-      : `<div class="empty">Nog geen gevoeligheden voor ${esc(a.naam)}. Kies een vertrekpunt links of schrijf er zelf een.</div>`}
+      : `<div class="empty">${icon("lamp", "ic groot")}<b>Nog geen gevoeligheden</b><span>Kies een vertrekpunt of schrijf er zelf een.</span></div>`}
     </section></div>`;
   body.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => { const s = sug[Number(b.dataset.sug)]; $("#gCat").value = s[0]; $("#gOms").value = s[1]; $("#gOms").focus(); }));
   body.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { ui.prefillAct = b.dataset.act; ui.tab = "acties"; render(); }));
@@ -383,7 +411,7 @@ function tabActies(body, a, gev, act) {
       <div><div class="meta"><span class="pill p-${x.status === "Afgerond" ? "ok" : x.status === "Lopend" ? "midden" : "mute"}">${esc(x.status)}</span><span>impact ${esc(x.impact)} · inspanning ${esc(x.inspanning)}</span>${x.eigenaar ? `<span>· ${esc(x.eigenaar)}</span>` : ""}</div>
       <p><b>${esc(x.titel)}</b></p>${x.omschrijving ? `<p class="hint">${esc(x.omschrijving)}</p>` : ""}${g ? `<p class="hint">Voor: ${esc(g.omschrijving)}</p>` : ""}</div>
       <div class="side">${canWrite ? `<select data-stat="${esc(x.id)}" aria-label="Status">${opts(STATUS, x.status)}</select><button class="ghost" data-del="acties/${esc(x.id)}" aria-label="Verwijder actie">✕</button>` : ""}</div></div>`; }).join("")}</div>`
-    : `<div class="empty">Nog geen acties voor ${esc(a.naam)}. Start met een bewezen actie of koppel er een aan een gevoeligheid.</div>`}
+    : `<div class="empty">${icon("vlag", "ic groot")}<b>Nog geen acties</b><span>Start met een bewezen actie of koppel er een aan een gevoeligheid.</span></div>`}
   </section>`;
   if (pre) { const g = gev.find((y) => y.id === pre); if (g) $("#aTit").focus(); }
   body.querySelectorAll("[data-sa]").forEach((b) => (b.onclick = () => { const s = SUG_ACT[Number(b.dataset.sa)]; $("#aTit").value = s[0]; $("#aOms").value = s[1]; $("#aImp").value = s[2]; $("#aInsp").value = s[3]; $("#aTit").focus(); }));
@@ -667,7 +695,8 @@ function renderSafe() {
 
 function viewLogin() {
   if (!sb) return '<div class="empty">Laden…</div>';
-  return `<form class="panel login" id="fLogin">
+  return `<div class="login-hero"><div class="login-beeld">${icon("blad", "ic")}</div><h2>Minder weggooien begint met meten</h2><p>Weeg wat terugkomt, zie waar het misloopt en zet per afdeling gericht acties op.</p></div>
+  <form class="panel login" id="fLogin">
     <h2>Aanmelden</h2>
     <p class="hint">Vul je e-mailadres in. Je krijgt een mail met een link om je aan te melden.</p>
     <label>E-mailadres<input type="text" inputmode="email" autocomplete="email" id="lMail" required></label>
