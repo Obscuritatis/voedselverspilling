@@ -1,6 +1,6 @@
-# Voedselverspilling
+# Bord & Beleving
 
-Webapp om voedselverspilling in kaart te brengen per site en per afdeling. Per afdeling leg je vast:
+Webapp (vroeger "Voedselverspilling") om voedselverspilling in kaart te brengen per site en per afdeling. Per afdeling leg je vast:
 
 - **Metingen**: gewogen verspilling in kg per datum, maaltijd, soort verlies (bordresten, overproductie,
   bederf of vervallen voorraad, bereidingsverlies) en component (soep, groenten, ...).

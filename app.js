@@ -616,7 +616,7 @@ function blad(wb, naam, titel, info, breedtes, kleurTab = XL.kop) {
   const t = ws.getCell("A1"); t.value = titel; t.font = { bold: true, size: 18, color: { argb: "FFFFFFFF" } }; vul(t, XL.donker); t.alignment = { vertical: "middle", indent: 1 };
   ws.getRow(1).height = 38;
   ws.mergeCells(2, 1, 2, breedtes.length);
-  const s2 = ws.getCell("A2"); s2.value = "Meten, begrijpen, verminderen"; s2.font = { italic: true, size: 10, color: { argb: "FFE1F0E7" } }; vul(s2, XL.kop); s2.alignment = { vertical: "middle", indent: 1 };
+  const s2 = ws.getCell("A2"); s2.value = "Bord & Beleving · voedselverspilling en maaltijdbeleving"; s2.font = { italic: true, size: 10, color: { argb: "FFE1F0E7" } }; vul(s2, XL.kop); s2.alignment = { vertical: "middle", indent: 1 };
   ws.getRow(2).height = 18;
   info.forEach(([k, v], i) => { const r = ws.getRow(4 + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true, color: { argb: XL.info } }; r.getCell(2).value = v; });
   return { ws, start: 4 + info.length + 1 };
@@ -637,7 +637,7 @@ async function exporteerVerslag(afdId) {
   const info = [["Site", site?.naam || ""], ...(afdId ? [["Afdeling", afd[0]?.naam || ""]] : []), ["Periode", periodeTekst], ["Geëxporteerd op", new Date().toLocaleString("nl-BE")]];
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Voedselverspilling"; wb.created = new Date();
+  wb.creator = "Bord & Beleving"; wb.created = new Date();
 
   // Overzicht
   const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 16, 12, 12, 14, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
@@ -727,7 +727,7 @@ async function exporteerVerslag(afdId) {
   wb.eachSheet((ws) => ws.eachRow({ includeEmpty: true }, (r) => r.eachCell({ includeEmpty: true }, (c) => { if (!c.font?.name) c.font = { ...(c.font || {}), name: "Calibri" }; })));
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const naam = `Voedselverspilling ${onderwerp} ${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+  const naam = `Bord & Beleving ${onderwerp} ${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
   const el = document.createElement("a");
   el.href = URL.createObjectURL(blob); el.download = naam;
   document.body.appendChild(el); el.click(); el.remove();
