@@ -534,12 +534,50 @@ function laadExcelJS() {
   });
 }
 const XL = {
-  kop: "FF1D2A23", rand: { style: "thin", color: { argb: "FFDDE3DC" } },
+  kop: "FF1F6B4E", donker: "FF17533C", zebra: "FFFAF8F3", info: "FF627066", rand: { style: "thin", color: { argb: "FFE6E1D6" } },
+  // Zelfde kleuren als in de app: [lichte tint, volle kleur].
+  stroom: { bordrest: ["FFFBE4DB", "FFE0673F"], overproductie: ["FFFCF0D6", "FFC98A12"], bederf: ["FFEDE3F3", "FF8B5FAE"], bereiding: ["FFDDF0F2", "FF2B8F9C"] },
+  tegel: { groen: ["FFE1F0E7", "FF1F6B4E"], blauw: ["FFE2EDF7", "FF2F6596"], amber: ["FFFBEED6", "FFA86A12"], rood: ["FFFBE3DC", "FFC2452F"] },
   impact: { hoog: ["FFF7E3DF", "FFB23B2E"], midden: ["FFF6ECD8", "FFA8741F"], laag: ["FFE3EBF4", "FF3B6390"] },
   focus: { hoog: ["FFF7E3DF", "FFB23B2E"], midden: ["FFF6ECD8", "FFA8741F"], ok: ["FFE2EFE8", "FF2F6B55"], mute: ["FFF5F6F4", "FF5D6B62"] },
   status: { Afgerond: ["FFE2EFE8", "FF2F6B55"], Lopend: ["FFF6ECD8", "FFA8741F"], Gepland: ["FFE3EBF4", "FF3B6390"], Idee: ["FFF5F6F4", "FF5D6B62"] },
 };
-const kleur = (cel, [bg, fg]) => { cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } }; cel.font = { bold: true, color: { argb: fg } }; };
+const vul = (cel, argb) => { cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb } }; };
+const kleur = (cel, [bg, fg]) => { vul(cel, bg); cel.font = { bold: true, color: { argb: fg } }; };
+const STROOM_HEX = { bordrest: "#e0673f", overproductie: "#e9a42b", bederf: "#8b5fae", bereiding: "#2b8f9c" };
+
+// Grafiek als afbeelding (ExcelJS kan geen echte Excel-grafieken maken): ring per soort verlies en balken per afdeling.
+async function grafiekPng(stromen, perAfd) {
+  try { await document.fonts.ready; } catch {}
+  const W = 960, H = 340, r = 2, c = document.createElement("canvas");
+  c.width = W * r; c.height = H * r;
+  const x = c.getContext("2d"); x.scale(r, r);
+  const body = "IBM Plex Sans, Segoe UI, sans-serif", disp = "Barlow Condensed, Arial Narrow, sans-serif";
+  x.fillStyle = "#ffffff"; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#1c2a22"; x.font = `700 20px ${disp}`; x.fillText("Per soort verlies", 20, 32); x.fillText("Per afdeling (kg)", 420, 32);
+  const tot = stromen.reduce((t, [, v]) => t + v, 0);
+  const cx = 110, cy = 185, ro = 90, ri = 58;
+  if (tot) {
+    let a = -Math.PI / 2;
+    stromen.forEach(([k, v]) => { const b = a + (v / tot) * Math.PI * 2; x.beginPath(); x.arc(cx, cy, ro, a, b); x.arc(cx, cy, ri, b, a, true); x.closePath(); x.fillStyle = STROOM_HEX[k] || "#2f8f66"; x.fill(); a = b; });
+    x.textAlign = "center"; x.fillStyle = "#1c2a22"; x.font = `700 24px ${disp}`; x.fillText(kg(tot), cx, cy + 4); x.font = `12px ${body}`; x.fillStyle = "#627066"; x.fillText("totaal", cx, cy + 22); x.textAlign = "left";
+    stromen.forEach(([k, v], i) => { const y = 120 + i * 36; x.fillStyle = STROOM_HEX[k] || "#2f8f66"; x.beginPath(); x.roundRect(225, y - 11, 14, 14, 4); x.fill(); x.fillStyle = "#1c2a22"; x.font = `600 13px ${body}`; x.fillText(kort(k), 247, y); x.fillStyle = "#627066"; x.font = `12px ${body}`; x.fillText(`${kg(v)} · ${Math.round((v / tot) * 100)}%`, 247, y + 16); });
+  } else { x.fillStyle = "#627066"; x.font = `14px ${body}`; x.fillText("Nog geen wegingen in deze periode.", 20, 70); }
+  const rij = perAfd.filter(([, v]) => v > 0).sort((p, q) => q[1] - p[1]).slice(0, 9), max = Math.max(0.1, ...rij.map(([, v]) => v));
+  const bx = 580, bw = W - bx - 70, bh = 18, gap = Math.min(30, 280 / Math.max(1, rij.length));
+  rij.forEach(([naam, v], i) => {
+    const y = 58 + i * gap;
+    x.fillStyle = "#1c2a22"; x.font = `13px ${body}`; x.textAlign = "right";
+    let n = naam; while (x.measureText(n).width > bx - 430 && n.length > 3) n = n.slice(0, -2); if (n !== naam) n = n.trimEnd() + "…";
+    x.fillText(n, bx - 10, y + 13); x.textAlign = "left";
+    x.fillStyle = "#f3f0e8"; x.beginPath(); x.roundRect(bx, y, bw, bh, 9); x.fill();
+    const g = x.createLinearGradient(bx, 0, bx + bw, 0); g.addColorStop(0, "#1f6b4e"); g.addColorStop(1, "#2f8f66");
+    x.fillStyle = g; x.beginPath(); x.roundRect(bx, y, Math.max(bh, (v / max) * bw), bh, 9); x.fill();
+    x.fillStyle = "#1c2a22"; x.font = `600 12px ${body}`; x.fillText(kg(v), bx + bw + 8, y + 13);
+  });
+  if (!rij.length) { x.fillStyle = "#627066"; x.font = `14px ${body}`; x.fillText("Nog geen wegingen in deze periode.", 420, 70); }
+  return c.toDataURL("image/png").split(",")[1];
+}
 const kgNum = (n) => Math.round(n * 100) / 100;
 const fmtD = (iso) => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return `${d}/${m}/${y}`; };
 const prioriteit = (x) => (x.impact === "hoog" ? (x.inspanning === "laag" ? "Snel resultaat" : "Project") : (x.inspanning === "laag" ? "Meenemen" : "Herbekijken"));
@@ -550,7 +588,7 @@ function tabel(ws, startRij, kolommen, rijen, opmaak) {
   kolommen.forEach(([titel], i) => {
     const c = kop.getCell(i + 1); c.value = titel;
     c.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XL.kop } };
+    vul(c, XL.kop); c.border = { bottom: { style: "medium", color: { argb: XL.donker } } };
     c.alignment = { vertical: "middle", wrapText: true };
   });
   kop.height = 28;
@@ -559,7 +597,8 @@ function tabel(ws, startRij, kolommen, rijen, opmaak) {
     rij.values = waarden;
     rij.eachCell({ includeEmpty: true }, (c, nr) => {
       if (nr > kolommen.length) return;
-      c.alignment = { vertical: "top", wrapText: true }; c.border = { top: XL.rand, bottom: XL.rand, left: XL.rand, right: XL.rand };
+      c.alignment = { vertical: "top", wrapText: true }; c.border = { bottom: XL.rand };
+      if (k % 2) vul(c, XL.zebra);
       if (kolommen[nr - 1][2]) c.numFmt = kolommen[nr - 1][2];
     });
     if (opmaak) opmaak(rij, k);
@@ -567,12 +606,20 @@ function tabel(ws, startRij, kolommen, rijen, opmaak) {
   if (!rijen.length) ws.getRow(startRij + 1).getCell(1).value = "Geen gegevens.";
   return startRij + 1 + Math.max(1, rijen.length);
 }
-function blad(wb, naam, titel, info, breedtes) {
+function blad(wb, naam, titel, info, breedtes, kleurTab = XL.kop) {
   const ws = wb.addWorksheet(naam, { pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
   ws.columns = breedtes.map((w) => ({ width: w }));
-  ws.getCell("A1").value = titel; ws.getCell("A1").font = { bold: true, size: 16 };
-  info.forEach(([k, v], i) => { const r = ws.getRow(2 + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; });
-  return { ws, start: 2 + info.length + 1 };
+  ws.properties.tabColor = { argb: kleurTab };
+  ws.views = [{ showGridLines: false }];
+  // Groene titelbalk over de volle breedte, zoals de appbalk.
+  ws.mergeCells(1, 1, 1, breedtes.length);
+  const t = ws.getCell("A1"); t.value = titel; t.font = { bold: true, size: 18, color: { argb: "FFFFFFFF" } }; vul(t, XL.donker); t.alignment = { vertical: "middle", indent: 1 };
+  ws.getRow(1).height = 38;
+  ws.mergeCells(2, 1, 2, breedtes.length);
+  const s2 = ws.getCell("A2"); s2.value = "Meten, begrijpen, verminderen"; s2.font = { italic: true, size: 10, color: { argb: "FFE1F0E7" } }; vul(s2, XL.kop); s2.alignment = { vertical: "middle", indent: 1 };
+  ws.getRow(2).height = 18;
+  info.forEach(([k, v], i) => { const r = ws.getRow(4 + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true, color: { argb: XL.info } }; r.getCell(2).value = v; });
+  return { ws, start: 4 + info.length + 1 };
 }
 
 async function exporteerVerslag(afdId) {
@@ -595,10 +642,33 @@ async function exporteerVerslag(afdId) {
   // Overzicht
   const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 16, 12, 12, 14, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
   const totKg = sum(ms);
-  const samen = [["Totaal verspild (kg)", kgNum(totKg)], ["Aantal metingen", ms.length], ["Gevoeligheden", `${gev.length}, waarvan ${gev.filter((g) => g.impact === "hoog").length} hoog`], ["Acties", `${act.filter((x) => x.status !== "Afgerond").length} open, ${act.filter((x) => x.status === "Afgerond").length} afgerond`]];
-  samen.forEach(([k, v], i) => { const r = o.ws.getRow(o.start + i); r.getCell(1).value = k; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: "left" }; });
-  let rij = o.start + samen.length + 1;
-  o.ws.getRow(rij).getCell(1).value = "Per afdeling"; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
+  // Kerncijfers als gekleurde tegels.
+  const mtAanw = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x) && Number(x.aanwezig) > 0), mtKeys = new Set(mtAanw.map(maalKey));
+  const nAanw = mtAanw.reduce((t, x) => t + Number(x.aanwezig), 0), gAanw = nAanw ? (sum(ms.filter((m) => mtKeys.has(maalKey(m)))) * 1000) / nAanw : null;
+  const tegels = [
+    [1, 1, "Totaal verspild", kgNum(totKg), '0.0 "kg"', XL.tegel.groen],
+    [2, 3, "Per aanwezige", gAanw == null ? "–" : Math.round(gAanw), '0 "g"', XL.tegel.amber],
+    [4, 6, `Wegingen op ${new Set(ms.map((x) => x.datum)).size} meetdagen`, ms.length, "0", XL.tegel.blauw],
+    [7, 10, `Open acties (${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden)`, act.filter((x) => x.status !== "Afgerond").length, "0", XL.tegel.rood],
+  ];
+  const tl = o.start, tv = o.start + 1;
+  tegels.forEach(([van, tot, label, waarde, fmt, [bg, fg]]) => {
+    if (tot > van) { o.ws.mergeCells(tl, van, tl, tot); o.ws.mergeCells(tv, van, tv, tot); }
+    const l = o.ws.getCell(tl, van), w = o.ws.getCell(tv, van);
+    l.value = label; l.font = { bold: true, size: 9, color: { argb: fg } }; l.alignment = { vertical: "bottom", indent: 1, wrapText: true };
+    w.value = waarde; w.numFmt = fmt; w.font = { bold: true, size: 22, color: { argb: fg } }; w.alignment = { horizontal: "left", vertical: "middle", indent: 1 };
+    for (let c = van; c <= tot; c++) { vul(o.ws.getCell(tl, c), bg); vul(o.ws.getCell(tv, c), bg); }
+  });
+  o.ws.getRow(tl).height = 26; o.ws.getRow(tv).height = 40;
+  // Grafiek
+  const gStart = tv + 2, gRijen = 15;
+  for (let i = 0; i < gRijen; i++) o.ws.getRow(gStart + i).height = 18;
+  try {
+    const img = wb.addImage({ base64: await grafiekPng(groupKg(ms, "stroom"), afd.map((a) => [a.naam, sum(ofAfd(ms, a.id))])), extension: "png" });
+    o.ws.addImage(img, { tl: { col: 0, row: gStart - 1 }, ext: { width: 960, height: 340 } });
+  } catch (e) { console.warn("Grafiek niet gelukt", e); }
+  let rij = gStart + gRijen + 1;
+  o.ws.getRow(rij).getCell(1).value = "Per afdeling"; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 14, color: { argb: XL.donker } };
   const perAfd = afd.map((a) => {
     const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
     const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
@@ -607,45 +677,54 @@ async function exporteerVerslag(afdId) {
   });
   const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per plaats per meetdag (g)", , "0"], ["Porties geleverd"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
   rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(15), XL.focus[focusInfo(afd[k])[0]]));
-  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = kgNum(totKg); t.getCell(4).numFmt = "0.0"; t.getCell(5).value = ms.length; t.font = { bold: true }; rij++; }
+  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = kgNum(totKg); t.getCell(4).numFmt = "0.0"; t.getCell(5).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
   const verdeling = (titel, key, labels) => {
-    rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 13 };
-    const g = groupKg(ms, key);
-    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : "Component"], ["kg", , "0.0"], ["Aandeel", , "0%"]], g.map(([k, v]) => [labels ? labels[k] || k : k, kgNum(v), totKg ? v / totKg : 0]));
+    rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 14, color: { argb: XL.donker } };
+    const g = groupKg(ms, key), max = g.length ? g[0][1] : 1;
+    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : "Component"], ["kg", , "0.0"], ["Aandeel", , "0%"], [""]], g.map(([k, v]) => [labels ? labels[k] || k : k, kgNum(v), totKg ? v / totKg : 0, "█".repeat(Math.max(1, Math.round((v / max) * 28)))]),
+      (r, k) => {
+        const kl = key === "stroom" ? XL.stroom[g[k][0]] : null, bar = r.getCell(4);
+        bar.font = { color: { argb: kl ? kl[1] : XL.kop } }; bar.alignment = { vertical: "middle", wrapText: false };
+        if (kl) { vul(r.getCell(1), kl[0]); r.getCell(1).font = { bold: true, color: { argb: kl[1] } }; }
+      });
   };
   verdeling("Per soort verlies", "stroom", STROMEN);
   verdeling("Per component", "component");
 
   // Metingen
-  const m = blad(wb, "Metingen", "Metingen", info, [12, 20, 14, 30, 28, 12, 40]);
+  const m = blad(wb, "Metingen", "Metingen", info, [12, 20, 14, 30, 28, 12, 40], XL.stroom.bordrest[1]);
   tabel(m.ws, m.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Soort verlies"], ["Component"], ["kg", , "0.0"], ["Opmerking"]],
-    ms.map((x) => [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, STROMEN[x.stroom] || x.stroom, x.component, kgNum(Number(x.kg) || 0), x.opmerking]));
+    ms.map((x) => [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, STROMEN[x.stroom] || x.stroom, x.component, kgNum(Number(x.kg) || 0), x.opmerking]),
+    (r, k) => { const kl = XL.stroom[ms[k].stroom]; if (kl) { r.getCell(4).font = { bold: true, color: { argb: kl[1] } }; } r.getCell(6).font = { bold: true }; });
   if (ms.length) m.ws.autoFilter = { from: { row: m.start, column: 1 }, to: { row: m.start + ms.length, column: 7 } };
-  m.ws.views = [{ state: "frozen", ySplit: m.start }];
+  m.ws.views = [{ state: "frozen", ySplit: m.start, showGridLines: false }];
 
   // Maaltijden (porties en aanwezigen)
   const mts = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
-  const mb = blad(wb, "Maaltijden", "Maaltijden: porties en aanwezigen", info, [12, 20, 14, 12, 12, 12, 12, 16]);
+  const mb = blad(wb, "Maaltijden", "Maaltijden: porties en aanwezigen", info, [12, 20, 14, 12, 12, 12, 12, 16], XL.stroom.overproductie[1]);
   tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Porties"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
-    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }));
-  mb.ws.views = [{ state: "frozen", ySplit: mb.start }];
+    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
+    (r, k) => { const x = mts[k]; if (x.porties != null && x.aanwezig != null && x.porties !== x.aanwezig) kleur(r.getCell(6), x.porties > x.aanwezig ? XL.tegel.amber : XL.tegel.blauw); });
+  mb.ws.views = [{ state: "frozen", ySplit: mb.start, showGridLines: false }];
 
   // Gevoeligheden
   const gs = [...gev].sort((x, y) => naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || NIVEAU.indexOf(y.impact) - NIVEAU.indexOf(x.impact));
-  const g = blad(wb, "Gevoeligheden", "Gevoeligheden", info.filter(([k]) => k !== "Periode"), [20, 26, 10, 50, 18, 40]);
+  const g = blad(wb, "Gevoeligheden", "Gevoeligheden", info.filter(([k]) => k !== "Periode"), [20, 26, 10, 50, 18, 40], XL.stroom.bederf[1]);
   tabel(g.ws, g.start, [["Afdeling"], ["Categorie"], ["Impact"], ["Omschrijving"], ["Bron"], ["Acties"]],
     gs.map((x) => [naamVan(x.afdelingId), x.categorie, x.impact, x.omschrijving, x.bron, act.filter((y) => y.gevoeligheidId === x.id).map((y) => `${y.titel} (${y.status})`).join("\n") || "Nog geen actie"]),
     (r, k) => kleur(r.getCell(3), XL.impact[gs[k].impact] || XL.impact.laag));
-  g.ws.views = [{ state: "frozen", ySplit: g.start }];
+  g.ws.views = [{ state: "frozen", ySplit: g.start, showGridLines: false }];
 
   // Acties
   const as = [...act].sort((x, y) => naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
-  const a = blad(wb, "Acties", "Acties", info.filter(([k]) => k !== "Periode"), [20, 34, 11, 10, 11, 16, 18, 40, 40]);
+  const a = blad(wb, "Acties", "Acties", info.filter(([k]) => k !== "Periode"), [20, 34, 11, 10, 11, 16, 18, 40, 40], XL.stroom.bereiding[1]);
   tabel(a.ws, a.start, [["Afdeling"], ["Actie"], ["Status"], ["Impact"], ["Inspanning"], ["Prioriteit"], ["Trekker"], ["Wat houdt het in"], ["Voor gevoeligheid"]],
     as.map((x) => [naamVan(x.afdelingId), x.titel, x.status, x.impact, x.inspanning, prioriteit(x), x.eigenaar, x.omschrijving, (gev.find((y) => y.id === x.gevoeligheidId) || {}).omschrijving || ""]),
     (r, k) => { kleur(r.getCell(3), XL.status[as[k].status] || XL.status.Idee); kleur(r.getCell(4), XL.impact[as[k].impact] || XL.impact.laag); });
-  a.ws.views = [{ state: "frozen", ySplit: a.start }];
+  a.ws.views = [{ state: "frozen", ySplit: a.start, showGridLines: false }];
 
+  // Opmaak hierboven vervangt het hele lettertype; zet overal hetzelfde lettertype terug.
+  wb.eachSheet((ws) => ws.eachRow({ includeEmpty: true }, (r) => r.eachCell({ includeEmpty: true }, (c) => { if (!c.font?.name) c.font = { ...(c.font || {}), name: "Calibri" }; })));
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const naam = `Voedselverspilling ${onderwerp} ${today()}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
