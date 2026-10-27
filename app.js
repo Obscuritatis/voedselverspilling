@@ -196,7 +196,7 @@ function render() {
   else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
 }
 
-// Beginscherm: de app opent altijd hier, met een tegel per site (naam en aantal afdelingen).
+// Beginscherm: de app opent altijd hier, met een tegel per site (naam en afdelingen per soort).
 function renderStart(main, sites) {
   const u = new Date().getHours(), groet = u < 12 ? "Goedemorgen" : u < 18 ? "Goedemiddag" : "Goedenavond";
   main.innerHTML = `
@@ -204,7 +204,11 @@ function renderStart(main, sites) {
     <div class="site-tegels">${sites.map((st, i) => `<button type="button" class="site-tegel k${i % 4}" data-site="${esc(st.id)}">
         <span class="site-ic">${icon(/ziekenhuis/i.test(st.naam) ? "ziekenhuis" : "huis")}</span>
         <span class="site-naam">${esc(st.naam)}</span>
-        <span class="site-sub">${(() => { const n = S.afdelingen.filter((a) => a.siteId === st.id).length; return n ? `${n} ${n === 1 ? "afdeling" : "afdelingen"}` : "Nog geen afdelingen"; })()}</span>
+        <span class="site-sub">${(() => {
+          const afd = S.afdelingen.filter((a) => a.siteId === st.id);
+          const per = Object.entries(TYPES).map(([k, [ev, mv]]) => { const c = afd.filter((a) => (TYPES[a.type] ? a.type : "andere") === k).length; return c ? `${c} ${(c === 1 ? ev : mv).toLowerCase()}` : ""; }).filter(Boolean);
+          return per.length ? per.map(esc).join("<br>") : "Nog geen afdelingen";
+        })()}</span>
         <span class="site-pijl">${icon("pijl")}</span>
       </button>`).join("")}</div>`;
   main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = "overzicht"; saveUi(); render(); window.scrollTo({ top: 0 }); }));
