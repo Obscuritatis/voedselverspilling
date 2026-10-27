@@ -186,11 +186,12 @@ function render() {
   renderNav();
   const main = $("#main");
   document.body.classList.toggle("uit", !sessie);
-  document.body.classList.toggle("start", !!sessie && ready && ui.view === "start" && sites.length > 0);
+  document.body.classList.toggle("start", !!sessie && ready && (ui.view === "start" || ui.view === "kies") && sites.length > 0);
   if (!sessie) { $("#nav").innerHTML = ""; main.innerHTML = viewLogin(); return; }
   if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
   if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
   if (ui.view === "start") renderStart(main, sites);
+  else if (ui.view === "kies") renderKies(main);
   else if (ui.view === "overzicht") renderOverzicht(main);
   else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
   else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
@@ -211,7 +212,22 @@ function renderStart(main, sites) {
         })()}</span>
         <span class="site-pijl">${icon("pijl")}</span>
       </button>`).join("")}</div>`;
-  main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = "overzicht"; saveUi(); render(); window.scrollTo({ top: 0 }); }));
+  main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = naSite(); saveUi(); render(); window.scrollTo({ top: 0 }); }));
+}
+
+// Op gsm kies je na de site eerst een afdeling uit een eenvoudige lijst (view "kies").
+const isGsm = () => window.matchMedia("(max-width: 760px)").matches;
+const naSite = () => (isGsm() ? "kies" : "overzicht");
+function renderKies(main) {
+  const site = S.sites.find((x) => x.id === ui.site), afd = siteAfd();
+  const rij = (a) => `<button type="button" class="kies-rij" data-kies="${esc(a.id)}"><i class="ndot d-${focusInfo(a)[0]}"></i><span>${esc(a.naam)}</span>${icon("pijl")}</button>`;
+  const groepen = Object.entries(TYPES).map(([k, [, mv]]) => { const l = afd.filter((a) => (TYPES[a.type] ? a.type : "andere") === k); return l.length ? `<div class="eyebrow grp">${mv}</div><div class="kies-lijst">${l.map(rij).join("")}</div>` : ""; }).join("");
+  main.innerHTML = `
+    <button type="button" class="terug" data-kies="start">‹ Alle sites</button>
+    <div><div class="eyebrow">Kies een afdeling</div><h2>${esc(site?.naam || "")}</h2></div>
+    <div class="kies">${groepen || `<div class="empty">Nog geen afdelingen. Voeg ze toe via Beheer.</div>`}</div>
+    <div class="kies-extra"><button type="button" class="soft" data-kies="overzicht">${icon("huis")}Overzicht van de site</button><button type="button" class="soft" data-kies="beheer">${icon("tandwiel")}Beheer</button></div>`;
+  main.querySelectorAll("[data-kies]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.kies; ui.tab = "metingen"; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
 }
 
 function renderNav() {
@@ -224,7 +240,9 @@ function renderNav() {
     if (!l.length) return "";
     return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`, `<i class="ndot d-${focusInfo(a)[0]}" title="${esc(focusInfo(a)[1])}"></i>`)).join("");
   };
-  $("#nav").innerHTML = btn("start", "Alle sites", "", icon("raster")) + btn("overzicht", "Overzicht site", "", icon("huis")) + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer", "", icon("tandwiel"));
+  const huidigeNaam = ui.view === "overzicht" ? "Overzicht site" : ui.view === "beheer" ? "Beheer" : afd.find((a) => a.id === ui.view)?.naam || "";
+  const gsmBalk = `<div class="nav-gsm"><button type="button" data-view="kies" class="terug">‹ Afdelingen</button><span>${esc(huidigeNaam)}</span></div>`;
+  $("#nav").innerHTML = gsmBalk + btn("start", "Alle sites", "", icon("raster")) + btn("overzicht", "Overzicht site", "", icon("huis")) + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer", "", icon("tandwiel"));
   $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
 }
 
@@ -563,7 +581,7 @@ function bindBeheer() {
   bindDeletes(document);
 }
 
-$("#siteSel").onchange = (e) => { if (e.target.value) { ui.site = e.target.value; ui.view = "overzicht"; saveUi(); } else ui.view = "start"; render(); window.scrollTo({ top: 0 }); };
+$("#siteSel").onchange = (e) => { if (e.target.value) { ui.site = e.target.value; ui.view = naSite(); saveUi(); } else ui.view = "start"; render(); window.scrollTo({ top: 0 }); };
 // Klik op het logo of de naam: terug naar het beginscherm.
 $("#home").onclick = () => { ui.view = "start"; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); };
 
