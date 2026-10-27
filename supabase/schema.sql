@@ -174,6 +174,9 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde) values
   ('wzc-passionisten-tiske', 'wzc-passionisten', 'Tiske', 'woonafdeling', 4),
   ('wzc-passionisten-buurtrestaurant', 'wzc-passionisten', 'Buurtrestaurant', 'restaurant', 5)
 on conflict (id) do nothing;
+-- Maximale bezetting (27/10/2026); enkel invullen waar nog niets staat, zodat wijzigingen in Beheer blijven.
+update public.vv_afdelingen set capaciteit = 18 where id = 'wzc-passionisten-janneke' and capaciteit is null;
+update public.vv_afdelingen set capaciteit = 14 where id in ('wzc-passionisten-mieken', 'wzc-passionisten-nieke', 'wzc-passionisten-tiske') and capaciteit is null;
 
 -- Site Psychiatrisch ziekenhuis (19/10/2026) met haar patiëntenafdelingen.
 insert into public.vv_sites (id, naam, volgorde) values
