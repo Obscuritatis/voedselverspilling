@@ -200,7 +200,11 @@ function focusFor(a) { const [cls, tekst] = focusInfo(a); return `<span class="p
 // ---------- render ----------
 function render() {
   const sites = [...S.sites].sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99));
-  if (!ui.site || !sites.some((s) => s.id === ui.site)) ui.site = sites[0]?.id || null;
+  // Op een afdeling hoort de site bij die afdeling (ook meteen na vernieuwen, vóór de sitekeuze getekend wordt).
+  const huidigeAfd = S.afdelingen.find((x) => x.id === ui.view);
+  if (huidigeAfd) ui.site = huidigeAfd.siteId;
+  // Zolang de gegevens nog laden, de gekozen site niet vervangen door de eerste.
+  if (sites.length && (!ui.site || !sites.some((s) => s.id === ui.site))) ui.site = sites[0].id;
   $("#siteWrap").hidden = !sessie || !sites.length;
   $("#siteSel").innerHTML = `<option value=""${ui.view === "start" ? " selected" : ""}>Alle sites</option>` + sites.map((s) => `<option value="${esc(s.id)}"${ui.view !== "start" && s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("");
   renderNav();
