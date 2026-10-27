@@ -625,6 +625,17 @@ const kgNum = (n) => Math.round(n * 100) / 100;
 const fmtD = (iso) => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return `${d}/${m}/${y}`; };
 const prioriteit = (x) => (x.impact === "hoog" ? (x.inspanning === "laag" ? "Snel resultaat" : "Project") : (x.inspanning === "laag" ? "Meenemen" : "Herbekijken"));
 
+// Excel past de rijhoogte niet zelf aan bij afgebroken tekst; schat het aantal regels per cel.
+function rijHoogte(ws, rij, n) {
+  let regels = 1;
+  for (let i = 1; i <= n; i++) {
+    const v = rij.getCell(i).value, w = ws.getColumn(i).width || 10;
+    if (v == null || v === "" || typeof v === "number" || rij.getCell(i).alignment?.wrapText === false) continue;
+    const r = String(v).split("\n").reduce((t, l) => t + Math.max(1, Math.ceil((l.length * 1.15) / w)), 0);
+    regels = Math.max(regels, r);
+  }
+  return Math.min(120, 6 + regels * 15);
+}
 // Eén blad met titel, info-regels en een tabel. Geeft het rijnummer na de tabel terug.
 function tabel(ws, startRij, kolommen, rijen, opmaak) {
   const kop = ws.getRow(startRij);
@@ -634,7 +645,7 @@ function tabel(ws, startRij, kolommen, rijen, opmaak) {
     vul(c, XL.kop); c.border = { bottom: { style: "medium", color: { argb: XL.donker } } };
     c.alignment = { vertical: "middle", wrapText: true };
   });
-  kop.height = 28;
+  kop.height = Math.max(28, rijHoogte(ws, kop, kolommen.length));
   rijen.forEach((waarden, k) => {
     const rij = ws.getRow(startRij + 1 + k);
     rij.values = waarden;
@@ -645,6 +656,7 @@ function tabel(ws, startRij, kolommen, rijen, opmaak) {
       if (kolommen[nr - 1][2]) c.numFmt = kolommen[nr - 1][2];
     });
     if (opmaak) opmaak(rij, k);
+    rij.height = rijHoogte(ws, rij, kolommen.length);
   });
   if (!rijen.length) ws.getRow(startRij + 1).getCell(1).value = "Geen gegevens.";
   return startRij + 1 + Math.max(1, rijen.length);
@@ -724,7 +736,7 @@ async function exporteerVerslag(afdId) {
   const verdeling = (titel, key, labels) => {
     rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 14, color: { argb: XL.donker } };
     const g = groupKg(ms, key), max = g.length ? g[0][1] : 1;
-    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : "Component"], ["kg", , "0.0"], ["Aandeel", , "0%"], [""]], g.map(([k, v]) => [labels ? labels[k] || k : k, kgNum(v), totKg ? v / totKg : 0, "█".repeat(Math.max(1, Math.round((v / max) * 28)))]),
+    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : "Component"], ["kg", , "0.0"], ["Aandeel", , "0%"], [""]], g.map(([k, v]) => [labels ? kort(k) : k, kgNum(v), totKg ? v / totKg : 0, "█".repeat(Math.max(1, Math.round((v / max) * 28)))]),
       (r, k) => {
         const kl = key === "stroom" ? XL.stroom[g[k][0]] : null, bar = r.getCell(4);
         bar.font = { color: { argb: kl ? kl[1] : XL.kop } }; bar.alignment = { vertical: "middle", wrapText: false };
@@ -737,7 +749,7 @@ async function exporteerVerslag(afdId) {
   // Metingen
   const m = blad(wb, "Metingen", "Metingen", info, [12, 20, 14, 30, 28, 12, 40], XL.stroom.bordrest[1]);
   tabel(m.ws, m.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Soort verlies"], ["Component"], ["kg", , "0.0"], ["Opmerking"]],
-    ms.map((x) => [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, STROMEN[x.stroom] || x.stroom, x.component, kgNum(Number(x.kg) || 0), x.opmerking]),
+    ms.map((x) => [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, kort(x.stroom), x.component, kgNum(Number(x.kg) || 0), x.opmerking]),
     (r, k) => { const kl = XL.stroom[ms[k].stroom]; if (kl) { r.getCell(4).font = { bold: true, color: { argb: kl[1] } }; } r.getCell(6).font = { bold: true }; });
   if (ms.length) m.ws.autoFilter = { from: { row: m.start, column: 1 }, to: { row: m.start + ms.length, column: 7 } };
   m.ws.views = [{ state: "frozen", ySplit: m.start, showGridLines: false }];
