@@ -85,6 +85,26 @@ const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: 
 let sb = null, sessie = null, ready = false, canWrite = true;
 const ui = { site: null, view: "start", tab: "metingen", periode: 30, prefillAct: null };
 try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode) ui.periode = s.periode; } catch (e) {}
+// De huidige pagina staat in het adres (#/site/pagina/tab): vernieuwen blijft op dezelfde pagina,
+// de knop terug werkt, en de app zelf opstarten (zonder #) begint op het beginscherm.
+// Enkel adressen die met "#/" beginnen zijn van ons; de aanmeldlink van Supabase gebruikt ook de #.
+function leesAdres() {
+  const m = location.hash.match(/^#\/(.*)$/);
+  if (!m) return false;
+  const [site, view, tab] = m[1].split("/").map((x) => { try { return decodeURIComponent(x); } catch { return ""; } });
+  if (site) ui.site = site;
+  ui.view = view || "start";
+  if (tab) ui.tab = tab;
+  return true;
+}
+leesAdres();
+function schrijfAdres() {
+  if (location.hash && !location.hash.startsWith("#/")) return;
+  const h = ui.view === "start" ? "#/" : `#/${encodeURIComponent(ui.site || "")}/${encodeURIComponent(ui.view)}${ui.view !== "overzicht" && ui.view !== "kies" && ui.view !== "beheer" ? "/" + encodeURIComponent(ui.tab) : ""}`;
+  if (location.hash === h) return;
+  if (location.hash) history.pushState(null, "", h); else history.replaceState(null, "", h);
+}
+window.addEventListener("popstate", () => { if (leesAdres()) { ui.prefillAct = null; ui.wisAfd = null; render(); } });
 function saveUi() { try { localStorage.setItem("voedselverspilling-ui", JSON.stringify({ site: ui.site, periode: ui.periode })); } catch (e) {} }
 
 const $ = (s) => document.querySelector(s);
@@ -194,7 +214,8 @@ function render() {
   else if (ui.view === "kies") renderKies(main);
   else if (ui.view === "overzicht") renderOverzicht(main);
   else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
-  else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
+  else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) { ui.site = a.siteId; renderAfdeling(main, a); } else { ui.view = "overzicht"; renderOverzicht(main); } }
+  schrijfAdres();
 }
 
 // Beginscherm: de app opent altijd hier, met een tegel per site (naam en afdelingen per soort).
