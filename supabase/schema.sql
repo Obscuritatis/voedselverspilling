@@ -199,3 +199,7 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde) values
   ('psychiatrisch-ziekenhuis-verslavingszorg-groep-2-ac-kw', 'psychiatrisch-ziekenhuis', 'Verslavingszorg (groep 2 – AC-KW)', 'patientenafdeling', 9),
   ('psychiatrisch-ziekenhuis-eetherstel-leefgroep-1', 'psychiatrisch-ziekenhuis', 'Eetherstel (leefgroep 1)', 'patientenafdeling', 10)
 on conflict (id) do nothing;
+-- Personeelsrestaurant (27/10/2026).
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, omschrijving) values
+  ('psychiatrisch-ziekenhuis-personeelsrestaurant', 'psychiatrisch-ziekenhuis', 'Personeelsrestaurant', 'restaurant', 11, 'Restaurant voor medewerkers')
+on conflict (id) do nothing;
