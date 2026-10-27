@@ -113,6 +113,26 @@ body.uit nav.afd { display: none }
 body.start .layout { grid-template-columns: minmax(0, 1fr) }
 body.start nav.afd { display: none }
 /* Beginscherm met een tegel per site */
+.totaal { margin-top: 8px; background: linear-gradient(140deg, var(--bar-top), var(--accent-2)); color: #fff; border-radius: 22px; padding: 22px; box-shadow: var(--shadow) }
+.totaal .eyebrow { color: rgba(255,255,255,.8) }
+.totaal p { margin: 6px 0 0 }
+.totaal-kop { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px }
+.totaal .seg { background: rgba(255,255,255,.14); box-shadow: none }
+.totaal .seg button { color: #fff }
+.totaal .seg button[aria-pressed="true"] { background: #fff; color: var(--bar-top) }
+.totaal-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; align-items: center }
+@media (max-width: 700px) { .totaal-grid { grid-template-columns: minmax(0, 1fr) } }
+.totaal-cijfer > b { display: block; font-family: var(--font-display); font-size: 3.2rem; line-height: 1 }
+.totaal-cijfer > span { display: block; color: rgba(255,255,255,.85) }
+.trend { display: inline-block !important; margin-top: 8px; padding: 3px 10px; border-radius: 99px; font-size: .8rem; font-weight: 700; background: rgba(255,255,255,.18) }
+.totaal-mini { display: flex; gap: 22px; margin-top: 14px }
+.totaal-mini span { display: flex; flex-direction: column; font-size: .8rem; color: rgba(255,255,255,.8) }
+.totaal-mini b { font-family: var(--font-display); font-size: 1.5rem; color: #fff; line-height: 1.1 }
+.totaal-sites { display: flex; flex-direction: column; gap: 10px }
+.totaal-sites .b { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: .9rem }
+.totaal-sites .bar { grid-column: 1 / -1; background: rgba(255,255,255,.18); box-shadow: none }
+.totaal-sites .bar i { background: #fff }
+.totaal-sites .num { font-weight: 700 }
 .start-kop { margin-bottom: 4px }
 .site-tegels { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 16px }
 .site-tegel { --kc: var(--accent); position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 20px; border: 0; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); min-height: 170px; color: var(--ink) }
@@ -350,7 +370,7 @@ td.nowrap { white-space: nowrap }
 
 <script src="vendor/supabase-2.116.0.js"></script>
 <!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
-<script src="config.js?v=20261027m"></script>
-<script src="app.js?v=20261027m"></script>
+<script src="config.js?v=20261027n"></script>
+<script src="app.js?v=20261027n"></script>
 </body>
 </html>

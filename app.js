@@ -222,6 +222,28 @@ function render() {
   schrijfAdres();
 }
 
+// Totaal van alle sites per kalenderjaar (los van de periodekeuze). Testmetingen van vóór 2027 tellen niet mee.
+const EERSTE_JAAR = "2027";
+function totaalHtml(sites) {
+  const jaren = [...new Set(S.metingen.map((m) => (m.datum || "").slice(0, 4)).filter((j) => j >= EERSTE_JAAR))].sort();
+  if (!jaren.length) return `<section class="totaal"><div class="eyebrow">Totaal alle sites</div><p>Nog geen wegingen. De eerste metingen starten in 2027.</p></section>`;
+  if (!ui.jaar || !jaren.includes(ui.jaar)) ui.jaar = jaren[jaren.length - 1];
+  const ms = S.metingen.filter((m) => (m.datum || "").startsWith(ui.jaar));
+  const vorig = S.metingen.filter((m) => (m.datum || "").startsWith(String(Number(ui.jaar) - 1)));
+  const tot = sum(ms), vtot = sum(vorig), dagen = new Set(ms.map((m) => m.datum)).size;
+  const perSite = sites.map((st) => { const ids = new Set(S.afdelingen.filter((a) => a.siteId === st.id).map((a) => a.id)); return [st.naam, sum(ms.filter((m) => ids.has(m.afdelingId)))]; }).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(0.1, ...perSite.map(([, v]) => v));
+  const verschil = vtot ? Math.round(((tot - vtot) / vtot) * 100) : null;
+  return `<section class="totaal">
+    <div class="totaal-kop"><div class="eyebrow">Totaal alle sites</div><div class="seg">${jaren.map((j) => `<button data-jaar="${j}" aria-pressed="${j === ui.jaar}">${j}</button>`).join("")}</div></div>
+    <div class="totaal-grid">
+      <div class="totaal-cijfer"><b>${kg(tot)}</b><span>verspild in ${ui.jaar}</span>${verschil == null ? "" : `<span class="trend ${verschil <= 0 ? "goed" : "slecht"}">${verschil <= 0 ? "▼" : "▲"} ${Math.abs(verschil)}% t.o.v. ${Number(ui.jaar) - 1}</span>`}
+        <div class="totaal-mini"><span><b>${ms.length}</b>wegingen</span><span><b>${dagen}</b>meetdagen</span></div></div>
+      <div class="totaal-sites">${perSite.map(([n, v]) => `<div class="b"><span class="lbl">${esc(n)}</span><span class="num">${kg(v)}</span><div class="bar"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></div></div>`).join("")}</div>
+    </div>
+  </section>`;
+}
+
 // Beginscherm: de app opent altijd hier, met een tegel per site (naam en afdelingen per soort).
 function renderStart(main, sites) {
   const u = new Date().getHours(), groet = u < 12 ? "Goedemorgen" : u < 18 ? "Goedemiddag" : "Goedenavond";
@@ -236,7 +258,9 @@ function renderStart(main, sites) {
           return per.length ? per.map(esc).join("<br>") : "Nog geen afdelingen";
         })()}</span>
         <span class="site-pijl">${icon("pijl")}</span>
-      </button>`).join("")}</div>`;
+      </button>`).join("")}</div>
+    ${totaalHtml(sites)}`;
+  main.querySelectorAll("[data-jaar]").forEach((b) => (b.onclick = () => { ui.jaar = b.dataset.jaar; render(); }));
   main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = naSite(); saveUi(); render(); window.scrollTo({ top: 0 }); }));
 }
 
@@ -924,7 +948,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261027m";
+const APP_VERSIE = "20261027n";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
