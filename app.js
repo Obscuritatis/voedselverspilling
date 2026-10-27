@@ -922,7 +922,24 @@ render();
   // Bij terugkeer naar de app (gsm) gegevens verversen.
   document.addEventListener("visibilitychange", () => { if (!document.hidden && sessie) laadAlles(); });
 })();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
+// (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
+const APP_VERSIE = "20261027l";
+async function controleerVersie() {
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const { versie } = await r.json();
+    if (!versie || versie === APP_VERSIE) return;
+    const al = sessionStorage.getItem("vv-herladen");
+    if (al === versie) return; // niet blijven herladen als de nieuwe versie nog niet overal klaarstaat
+    sessionStorage.setItem("vv-herladen", versie);
+    location.reload();
+  } catch (e) {}
+}
+controleerVersie();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") controleerVersie(); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
 // Eigen installatieknop (Chrome/Edge/Samsung Internet): verschijnt zodra de browser de app installeerbaar vindt.
 let installVraag = null;
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installVraag = e; $("#installeer").hidden = false; });

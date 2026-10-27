@@ -69,3 +69,9 @@ De koppeling met Supabase staat in [`config.js`](config.js) (zelfde project als 
   Verandert het Supabase-adres in `config.js`, pas dan ook `connect-src` in die regel aan.
 - Wie gegevens mag zien of wijzigen, regelt de database (RLS met `heeft_toegang()`). De publishable sleutel in `config.js` geeft op zich geen toegang.
 - [`supabase/controle-beveiliging.sql`](supabase/controle-beveiliging.sql) toont, zonder iets te wijzigen, of RLS aan staat op elke tabel.
+
+## Nieuwe versie online zetten
+
+Voer na elke wijziging `./nieuwe-versie.sh JJJJMMDDx` uit (bv. `20261027m`). Dat zet hetzelfde versienummer in
+`app.js`, `index.html`, `sw.js` en `version.json`. De app kijkt bij openen en bij terugkeren in `version.json`
+of er een nieuwere versie is en laadt die dan zelf opnieuw.
