@@ -158,7 +158,7 @@ nav.afd .count { font-size: .74rem; color: var(--muted); font-variant-numeric: t
   .layout { grid-template-columns: minmax(0, 1fr); gap: 18px }
   /* Op gsm: enkel een balk terug naar de afdelingskeuze; de volledige lijst staat op het keuzescherm. */
   nav.afd { position: static; padding: 6px; max-height: none; border-radius: 99px }
-  nav.afd > :not(.nav-gsm) { display: none }
+  nav.afd:has(.nav-gsm) > :not(.nav-gsm) { display: none }
   .nav-gsm { display: flex !important }
   h2 { font-size: 1.7rem }
   .brand .sub { display: none }
@@ -348,7 +348,8 @@ td.nowrap { white-space: nowrap }
 <div class="toast" id="toast" hidden></div>
 
 <script src="vendor/supabase-2.116.0.js"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
+<script src="config.js?v=20261027j"></script>
+<script src="app.js?v=20261027j"></script>
 </body>
 </html>
