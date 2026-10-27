@@ -166,17 +166,23 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: now
 tr.click { cursor: pointer }
 tr.click:hover td { background: var(--surface-2) }
 .afd-cel { display: flex; gap: 10px; align-items: center }
+.huidig-veld { width: 4.6rem; padding: 5px 8px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600 }
+.bezet-rij { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-top: 6px }
+.bezet-rij label { display: inline-flex; align-items: center; gap: 8px }
 /* Op gsm wordt elke afdeling een kaartje: naam en gewicht, balk, per aanwezige en focus. */
 @media (max-width: 640px) {
   .afd-tabel thead { display: none }
   .afd-tabel tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 6px; border-bottom: 1px solid var(--line) }
   .afd-tabel tbody tr:last-child { border-bottom: 0 }
   .afd-tabel td { border: 0; padding: 0; background: none !important }
-  .afd-tabel td:nth-child(2), .afd-tabel td:nth-child(6), .afd-tabel td:nth-child(7) { display: none }
-  .afd-tabel td:nth-child(4), .afd-tabel td:nth-child(8) { grid-column: 1 / -1 }
-  .afd-tabel td:nth-child(3) { font-weight: 700; align-self: center }
-  .afd-tabel td:nth-child(5) { grid-column: 1 / -1; text-align: left; font-size: .85rem }
-  .afd-tabel td:nth-child(5)::before { content: "Per aanwezige: "; color: var(--muted) }
+  .afd-tabel td:nth-child(7), .afd-tabel td:nth-child(8) { display: none }
+  .afd-tabel td:nth-child(5), .afd-tabel td:nth-child(9) { grid-column: 1 / -1 }
+  .afd-tabel td:nth-child(4) { font-weight: 700; align-self: center; grid-column: 2; grid-row: 1 }
+  .afd-tabel td:nth-child(2), .afd-tabel td:nth-child(3), .afd-tabel td:nth-child(6) { text-align: left; font-size: .85rem }
+  .afd-tabel td:nth-child(2)::before { content: "Max. "; color: var(--muted) }
+  .afd-tabel td:nth-child(3)::before { content: "Huidig "; color: var(--muted) }
+  .afd-tabel td:nth-child(6) { grid-column: 1 / -1 }
+  .afd-tabel td:nth-child(6)::before { content: "Per aanwezige: "; color: var(--muted) }
 }
 
 /* Balken en ring */

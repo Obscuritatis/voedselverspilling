@@ -123,9 +123,23 @@ function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[ke
 // Maximale bezetting: vaste plaatsen + kortverblijven. Leeg als de afdeling geen vaste bezetting heeft.
 const plaatsen = (a) => (Number(a.capaciteit) || 0) + (Number(a.kortverblijf) || 0);
 const bezettingTekst = (a) => a.capaciteit ? `${a.capaciteit}${a.kortverblijf ? ` + ${a.kortverblijf} kortverblijf` : ""}` : "";
-// Gemiddelde verspilling per plaats per meetdag, in gram.
+// Huidige bezetting: vul je zelf in en verandert; zonder huidige bezetting rekenen we met de maximale.
+const huidig = (a) => (a.huidigeBezetting == null ? null : Number(a.huidigeBezetting));
+const huidigVeld = (a, cls = "huidig-veld") => canWrite
+  ? `<input type="number" min="0" step="1" inputmode="numeric" class="${cls}" data-huidig="${esc(a.id)}" value="${esc(a.huidigeBezetting ?? "")}" placeholder="${plaatsen(a) || "–"}" aria-label="Huidige bezetting ${esc(a.naam)}"${a.huidigeBezettingOp ? ` title="Bijgewerkt op ${esc(fmtDate(a.huidigeBezettingOp))}"` : ""}>`
+  : `${huidig(a) ?? `<span class="hint">–</span>`}`;
+function bindHuidig(root) {
+  root.querySelectorAll("[data-huidig]").forEach((inp) => {
+    inp.onclick = (e) => e.stopPropagation(); inp.onkeydown = (e) => e.stopPropagation();
+    inp.onchange = () => {
+      const v = inp.value === "" ? null : Math.max(0, Math.round(Number(inp.value)) || 0);
+      write(() => sb.from("vv_afdelingen").update({ huidige_bezetting: v, huidige_bezetting_op: v == null ? null : today() }).eq("id", inp.dataset.huidig), "Huidige bezetting bewaard");
+    };
+  });
+}
+// Gemiddelde verspilling per bewoner (huidige bezetting, anders maximale) per meetdag, in gram.
 function gramPerPlaats(a, ms) {
-  const n = plaatsen(a), dagen = new Set(ms.map((m) => m.datum)).size;
+  const n = huidig(a) || plaatsen(a), dagen = new Set(ms.map((m) => m.datum)).size;
   return n && dagen ? (sum(ms) * 1000) / dagen / n : null;
 }
 const gram = (g) => Math.round(g).toLocaleString("nl-BE") + " g";
@@ -228,25 +242,26 @@ function renderOverzicht(main) {
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
       <div class="tablewrap"><table class="afd-tabel">
-        <thead><tr><th>Afdeling</th><th style="text-align:right">Bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten er nu verblijven">Huidige bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
             <td><div class="afd-cel"><i class="ndot d-${focusInfo(a)[0]}"></i><div><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></div></div></td>
             <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
+            <td class="num">${huidigVeld(a)}</td>
             <td class="num">${kg(k)}</td>
             <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
-            <td class="num">${(() => { const pa = perAanwezige(a.id, ofAfd(ms, a.id)); if (pa != null) return gram(pa); const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : `<span class="hint" title="per plaats per meetdag">${gram(g)}/plaats</span>`; })()}</td>
+            <td class="num">${(() => { const pa = perAanwezige(a.id, ofAfd(ms, a.id)); if (pa != null) return gram(pa); const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : `<span class="hint" title="per bewoner per meetdag">${gram(g)}/bewoner</span>`; })()}</td>
             <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
             <td class="nowrap">${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
             <td class="focus">${focusFor(a)}</td>
-          </tr>`; }).join("") || `<tr><td colspan="8" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+          </tr>`; }).join("") || `<tr><td colspan="9" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
       </table></div>
     </section>
     <div class="two">
       <section class="panel"><h3 style="margin-bottom:12px">Per soort verlies</h3><div class="verdeling">${donutHtml(groupKg(ms, "stroom"))}${barsHtml(groupKg(ms, "stroom"), STROMEN)}</div></section>
       <section class="panel"><h3 style="margin-bottom:12px">Per component</h3>${barsHtml(groupKg(ms, "component").slice(0, 6))}</section>
     </div>`;
-  bindPeriode(main);
+  bindPeriode(main); bindHuidig(main);
   main.querySelectorAll("[data-open]").forEach((tr) => {
     const go = () => { ui.view = tr.dataset.open; ui.tab = "metingen"; render(); window.scrollTo({ top: 0 }); };
     tr.onclick = go; tr.onkeydown = (e) => { if (e.key === "Enter") go(); };
@@ -264,16 +279,16 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2>${bezettingTekst(a) ? `<p class="hint">Maximale bezetting: ${esc(bezettingTekst(a))}</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
-      ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per plaats`; })()}`, "t-blue")}
+      ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
       ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · ${ps.porties} porties voor ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}`, "t-amber")}
       ${stat("vlag", act.filter((x) => x.status !== "Afgerond").length, `open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden`, "t-green")}
     </div>
     <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${icon({ metingen: "weegschaal", gevoeligheden: "lamp", acties: "vlag" }[k])}${l}</button>`).join("")}</div>
     <div id="tabbody"></div>`;
-  bindPeriode(main);
+  bindPeriode(main); bindHuidig(main);
   main.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.tab; render(); }));
   const body = $("#tabbody");
   if (ui.tab === "metingen") tabMetingen(body, a, ms, msP);
@@ -464,8 +479,9 @@ function beheerHtml() {
   <section class="panel"><h3 style="margin-bottom:4px">Afdelingen van deze site</h3><p class="hint">Pas naam, volgorde, type, bezetting of omschrijving aan; het wordt bewaard zodra je het veld verlaat. Laat de plaatsen leeg als het aantal eters wisselt.</p>
     ${afd.length ? `<div class="list">${afd.map((a) => `<div class="item"><div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-naam="${esc(a.id)}" value="${esc(a.naam)}" aria-label="Naam ${esc(a.naam)}"${dis()} style="flex:1 1 12rem;font-weight:700"><input type="number" data-volg="${esc(a.id)}" value="${esc(a.volgorde ?? "")}" aria-label="Volgorde ${esc(a.naam)}" title="Volgorde"${dis()} style="width:5rem"><select data-type="${esc(a.id)}" aria-label="Type ${esc(a.naam)}"${dis()} style="width:auto">${typeOpties(a.type)}</select></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        <label class="hint" style="display:flex;gap:6px;align-items:center">Plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Max. plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
         <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Huidige bezetting${huidigVeld(a, "")}</label>
         <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
       </div>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
@@ -483,6 +499,7 @@ function beheerHtml() {
   </section>`;
 }
 function bindBeheer() {
+  bindHuidig(document);
   const fa = $("#fAfd"), fs = $("#fSite");
   if (fa) fa.onsubmit = async (e) => {
     e.preventDefault();
@@ -640,7 +657,7 @@ async function exporteerVerslag(afdId) {
   wb.creator = "Bord & Beleving"; wb.created = new Date();
 
   // Overzicht
-  const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 16, 12, 12, 14, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
+  const o = blad(wb, "Overzicht", `Verslag voedselverspilling ${onderwerp}`, info, [24, 14, 16, 12, 12, 12, 14, 14, 12, 12, 14, 26, 14, 14, 14, 36]);
   const totKg = sum(ms);
   // Kerncijfers als gekleurde tegels.
   const mtAanw = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x) && Number(x.aanwezig) > 0), mtKeys = new Set(mtAanw.map(maalKey));
@@ -673,11 +690,11 @@ async function exporteerVerslag(afdId) {
     const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
     const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
     const gp = gramPerPlaats(a, m), pa = perAanwezige(a.id, m), ps = portiesSaldo(a.id);
-    return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), ps ? ps.porties : "", ps ? ps.aanwezig : "", pa == null ? "" : Math.round(pa), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
+    return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", huidig(a) ?? "", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), ps ? ps.porties : "", ps ? ps.aanwezig : "", pa == null ? "" : Math.round(pa), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
   });
-  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per plaats per meetdag (g)", , "0"], ["Porties geleverd"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
-  rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(15), XL.focus[focusInfo(afd[k])[0]]));
-  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = kgNum(totKg); t.getCell(4).numFmt = "0.0"; t.getCell(5).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
+  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Huidige bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per bewoner per meetdag (g)", , "0"], ["Porties geleverd"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
+  rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(16), XL.focus[focusInfo(afd[k])[0]]));
+  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = afd.reduce((n, x) => n + (huidig(x) || 0), 0) || ""; t.getCell(5).value = kgNum(totKg); t.getCell(5).numFmt = "0.0"; t.getCell(6).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
   const verdeling = (titel, key, labels) => {
     rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 14, color: { argb: XL.donker } };
     const g = groupKg(ms, key), max = g.length ? g[0][1] : 1;

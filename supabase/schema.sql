@@ -34,6 +34,8 @@ create table if not exists public.vv_afdelingen (
 alter table public.vv_afdelingen add column if not exists capaciteit integer check (capaciteit >= 0);
 alter table public.vv_afdelingen add column if not exists kortverblijf integer check (kortverblijf >= 0);
 alter table public.vv_afdelingen add column if not exists aantallen_info text not null default '';
+alter table public.vv_afdelingen add column if not exists huidige_bezetting integer check (huidige_bezetting >= 0);
+alter table public.vv_afdelingen add column if not exists huidige_bezetting_op date;
 create index if not exists vv_afdelingen_site_idx on public.vv_afdelingen(site_id, volgorde);
 
 -- Gewogen verspilling. "stroom": bordrest, overproductie, bederf of bereiding.
