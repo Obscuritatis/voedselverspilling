@@ -37,6 +37,7 @@ const TYPES = {
   woonafdeling: ["Woonafdeling", "Woonafdelingen", "een woonafdeling"],
   patientenafdeling: ["Patiëntenafdeling", "Patiëntenafdelingen", "een patiëntenafdeling"],
   restaurant: ["Restaurant", "Restaurants", "een restaurant"],
+  dagverzorging: ["Dagverzorgingscentrum", "Dagverzorgingscentra", "een dagverzorgingscentrum"],
   andere: ["Andere", "Andere", "een afdeling"],
 };
 const typeNaam = (t) => (TYPES[t] || TYPES.andere)[0];
@@ -195,25 +196,17 @@ function render() {
   else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
 }
 
-// Beginscherm: de app opent altijd hier, met een tegel per site.
+// Beginscherm: de app opent altijd hier, met een tegel per site (naam en aantal afdelingen).
 function renderStart(main, sites) {
   const u = new Date().getHours(), groet = u < 12 ? "Goedemorgen" : u < 18 ? "Goedemiddag" : "Goedenavond";
   main.innerHTML = `
-    <div class="start-kop"><div class="eyebrow">${groet}</div><h2>Kies een site</h2><p class="hint">Cijfers van ${ui.periode ? `de laatste ${ui.periode} dagen` : "alle metingen"}.</p></div>
-    <div class="site-tegels">${sites.map((st, i) => {
-      const afd = S.afdelingen.filter((a) => a.siteId === st.id), ids = new Set(afd.map((a) => a.id));
-      const ms = S.metingen.filter((m) => ids.has(m.afdelingId) && inPeriode(m));
-      const aandacht = afd.filter((a) => focusInfo(a)[0] === "hoog").length;
-      const types = Object.entries(TYPES).map(([k, [ev, mv]]) => { const n = afd.filter((a) => a.type === k).length; return n ? `${n} ${n === 1 ? ev : mv}`.toLowerCase() : ""; }).filter(Boolean).join(" · ");
-      const laatste = ms.reduce((d, m) => (m.datum > d ? m.datum : d), "");
-      return `<button type="button" class="site-tegel k${i % 4}" data-site="${esc(st.id)}">
+    <div class="start-kop"><div class="eyebrow">${groet}</div><h2>Kies een site</h2></div>
+    <div class="site-tegels">${sites.map((st, i) => `<button type="button" class="site-tegel k${i % 4}" data-site="${esc(st.id)}">
         <span class="site-ic">${icon(/ziekenhuis/i.test(st.naam) ? "ziekenhuis" : "huis")}</span>
         <span class="site-naam">${esc(st.naam)}</span>
-        <span class="site-sub">${esc(types || "Nog geen afdelingen")}</span>
-        <span class="site-cijfers"><span><b>${kg(sum(ms))}</b>verspild</span><span><b>${ms.length}</b>wegingen</span>${aandacht ? `<span class="let-op"><b>${aandacht}</b>vraagt aandacht</span>` : ""}</span>
-        <span class="site-voet">${laatste ? `Laatste weging ${esc(fmtDate(laatste))}` : "Nog geen wegingen"}${icon("pijl")}</span>
-      </button>`;
-    }).join("")}</div>`;
+        <span class="site-sub">${(() => { const n = S.afdelingen.filter((a) => a.siteId === st.id).length; return n ? `${n} ${n === 1 ? "afdeling" : "afdelingen"}` : "Nog geen afdelingen"; })()}</span>
+        <span class="site-pijl">${icon("pijl")}</span>
+      </button>`).join("")}</div>`;
   main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = "overzicht"; saveUi(); render(); window.scrollTo({ top: 0 }); }));
 }
 
@@ -332,7 +325,7 @@ function tabMetingen(body, a, ms, msP) {
         <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, ui.mMaaltijd || "Middagmaal")}</select></label>
         <div class="full stap"><span>1</span>Aantallen voor deze maaltijd, één keer</div>
         <label>Geleverde porties<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
-        <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
+        <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : a.type === "dagverzorging" ? "e gasten" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
         <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" id="mAantBewaar"${dis()}>Aantallen bewaren</button><span class="hint" id="mAantInfo"></span></div>
         <div class="full stap"><span>2</span>Wat weeg je?</div>
         <fieldset class="full tegels" aria-label="Soort verlies">${Object.keys(STROMEN).map((k) => `<label class="tegel s-${k}"><input type="radio" name="mStroom" value="${k}"${k === (ui.mStroom || (a.type === "restaurant" ? "overproductie" : "bordrest")) ? " checked" : ""}><span class="tegel-ic">${icon(k)}</span><span>${esc(kort(k))}</span></label>`).join("")}</fieldset>

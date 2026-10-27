@@ -19,7 +19,7 @@ create table if not exists public.vv_sites (
   aangemaakt timestamptz not null default now()
 );
 
--- "type": woonafdeling, patientenafdeling, restaurant of andere.
+-- "type": woonafdeling, patientenafdeling, restaurant, dagverzorging of andere.
 create table if not exists public.vv_afdelingen (
   id text primary key,
   site_id text not null references public.vv_sites(id),
@@ -161,9 +161,11 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit,
   ('wzc-sint-alexius-minneborn', 'wzc-sint-alexius', 'Minneborn', 'woonafdeling', 3, 15, 2, ''),
   ('wzc-sint-alexius-germanusborn', 'wzc-sint-alexius', 'Germanusborn', 'woonafdeling', 4, 16, null, ''),
   ('wzc-sint-alexius-de-varen', 'wzc-sint-alexius', 'De Varen', 'woonafdeling', 5, 8, null, ''),
-  ('wzc-sint-alexius-dagverzorgingscentrum', 'wzc-sint-alexius', 'Dagverzorgingscentrum', 'andere', 6, null, null, 'Wisselt met wie deelneemt; de afdeling geeft de aanwezigen door aan de keuken.'),
+  ('wzc-sint-alexius-dagverzorgingscentrum', 'wzc-sint-alexius', 'Dagverzorgingscentrum', 'dagverzorging', 6, null, null, 'Wisselt met wie deelneemt; de afdeling geeft de aanwezigen door aan de keuken.'),
   ('wzc-sint-alexius-buurtrestaurant', 'wzc-sint-alexius', 'Buurtrestaurant', 'restaurant', 7, null, null, 'In het LDC; de verantwoordelijke LDC geeft de aantallen door aan de keuken, de vrijdag voor de nieuwe week begint.')
 on conflict (id) do nothing;
+-- Dagverzorgingscentrum is een eigen type (27/10/2026).
+update public.vv_afdelingen set type = 'dagverzorging' where id = 'wzc-sint-alexius-dagverzorgingscentrum' and type = 'andere';
 
 -- Site WZC Passionisten (19/10/2026).
 insert into public.vv_sites (id, naam, volgorde) values
