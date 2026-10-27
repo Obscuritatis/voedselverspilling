@@ -217,7 +217,8 @@ function renderStart(main, sites) {
 function renderNav() {
   if (!sessie) return;
   const afd = siteAfd();
-  const btn = (id, label, extra = "", voor = "") => `<button data-view="${esc(id)}" aria-current="${ui.view === id}"><span class="nl">${voor}<span>${esc(label)}</span></span>${extra}</button>`;
+  // Het gewicht staat onder de naam, zodat lange namen (Personeelsrestaurant) er niet over lopen.
+  const btn = (id, label, extra = "", voor = "") => `<button data-view="${esc(id)}" aria-current="${ui.view === id}"><span class="nl">${voor}<span class="nm"><span>${esc(label)}</span>${extra}</span></span></button>`;
   const groep = (type, titel) => {
     const l = afd.filter((a) => a.type === type);
     if (!l.length) return "";
