@@ -17,6 +17,9 @@ const ICON = {
   lamp: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3Z"/>',
   blad: '<path d="M5 19c0-8 5-14 15-14 0 10-6 15-14 15"/><path d="M5 19 13 11"/>',
   huis: '<path d="m3 11 9-7 9 7"/><path d="M5 10v10h14V10"/>',
+  ziekenhuis: '<rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M12 8v6M9 11h6M9 20.5v-3h6v3"/>',
+  raster: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
+  pijl: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   tandwiel: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
   excel: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
 };
@@ -79,7 +82,7 @@ const SUG_ACT = [
 
 const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: [], maaltijden: [], loaded: {} };
 let sb = null, sessie = null, ready = false, canWrite = true;
-const ui = { site: null, view: "overzicht", tab: "metingen", periode: 30, prefillAct: null };
+const ui = { site: null, view: "start", tab: "metingen", periode: 30, prefillAct: null };
 try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode) ui.periode = s.periode; } catch (e) {}
 function saveUi() { try { localStorage.setItem("voedselverspilling-ui", JSON.stringify({ site: ui.site, periode: ui.periode })); } catch (e) {} }
 
@@ -178,16 +181,40 @@ function render() {
   const sites = [...S.sites].sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99));
   if (!ui.site || !sites.some((s) => s.id === ui.site)) ui.site = sites[0]?.id || null;
   $("#siteWrap").hidden = !sessie || !sites.length;
-  $("#siteSel").innerHTML = sites.map((s) => `<option value="${esc(s.id)}"${s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("") || `<option>Nog geen site</option>`;
+  $("#siteSel").innerHTML = `<option value=""${ui.view === "start" ? " selected" : ""}>Alle sites</option>` + sites.map((s) => `<option value="${esc(s.id)}"${ui.view !== "start" && s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("");
   renderNav();
   const main = $("#main");
   document.body.classList.toggle("uit", !sessie);
+  document.body.classList.toggle("start", !!sessie && ready && ui.view === "start" && sites.length > 0);
   if (!sessie) { $("#nav").innerHTML = ""; main.innerHTML = viewLogin(); return; }
   if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
   if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
-  if (ui.view === "overzicht") renderOverzicht(main);
+  if (ui.view === "start") renderStart(main, sites);
+  else if (ui.view === "overzicht") renderOverzicht(main);
   else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
   else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) renderAfdeling(main, a); else { ui.view = "overzicht"; renderOverzicht(main); } }
+}
+
+// Beginscherm: de app opent altijd hier, met een tegel per site.
+function renderStart(main, sites) {
+  const u = new Date().getHours(), groet = u < 12 ? "Goedemorgen" : u < 18 ? "Goedemiddag" : "Goedenavond";
+  main.innerHTML = `
+    <div class="start-kop"><div class="eyebrow">${groet}</div><h2>Kies een site</h2><p class="hint">Cijfers van ${ui.periode ? `de laatste ${ui.periode} dagen` : "alle metingen"}.</p></div>
+    <div class="site-tegels">${sites.map((st, i) => {
+      const afd = S.afdelingen.filter((a) => a.siteId === st.id), ids = new Set(afd.map((a) => a.id));
+      const ms = S.metingen.filter((m) => ids.has(m.afdelingId) && inPeriode(m));
+      const aandacht = afd.filter((a) => focusInfo(a)[0] === "hoog").length;
+      const types = Object.entries(TYPES).map(([k, [ev, mv]]) => { const n = afd.filter((a) => a.type === k).length; return n ? `${n} ${n === 1 ? ev : mv}`.toLowerCase() : ""; }).filter(Boolean).join(" · ");
+      const laatste = ms.reduce((d, m) => (m.datum > d ? m.datum : d), "");
+      return `<button type="button" class="site-tegel k${i % 4}" data-site="${esc(st.id)}">
+        <span class="site-ic">${icon(/ziekenhuis/i.test(st.naam) ? "ziekenhuis" : "huis")}</span>
+        <span class="site-naam">${esc(st.naam)}</span>
+        <span class="site-sub">${esc(types || "Nog geen afdelingen")}</span>
+        <span class="site-cijfers"><span><b>${kg(sum(ms))}</b>verspild</span><span><b>${ms.length}</b>wegingen</span>${aandacht ? `<span class="let-op"><b>${aandacht}</b>vraagt aandacht</span>` : ""}</span>
+        <span class="site-voet">${laatste ? `Laatste weging ${esc(fmtDate(laatste))}` : "Nog geen wegingen"}${icon("pijl")}</span>
+      </button>`;
+    }).join("")}</div>`;
+  main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = "overzicht"; saveUi(); render(); window.scrollTo({ top: 0 }); }));
 }
 
 function renderNav() {
@@ -199,7 +226,7 @@ function renderNav() {
     if (!l.length) return "";
     return `<div class="eyebrow grp">${titel}</div>` + l.map((a) => btn(a.id, a.naam, `<span class="count">${kg(sum(ofAfd(S.metingen, a.id).filter(inPeriode)))}</span>`, `<i class="ndot d-${focusInfo(a)[0]}" title="${esc(focusInfo(a)[1])}"></i>`)).join("");
   };
-  $("#nav").innerHTML = btn("overzicht", "Overzicht site", "", icon("huis")) + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer", "", icon("tandwiel"));
+  $("#nav").innerHTML = btn("start", "Alle sites", "", icon("raster")) + btn("overzicht", "Overzicht site", "", icon("huis")) + Object.entries(TYPES).map(([k, [, mv]]) => groep(k, mv)).join("") + afd.filter((a) => !TYPES[a.type]).map((a) => btn(a.id, a.naam)).join("") + `<div class="eyebrow grp">Instellingen</div>` + btn("beheer", "Beheer", "", icon("tandwiel"));
   $("#nav").querySelectorAll("button[data-view]").forEach((b) => (b.onclick = () => { ui.view = b.dataset.view; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); }));
 }
 
@@ -538,7 +565,9 @@ function bindBeheer() {
   bindDeletes(document);
 }
 
-$("#siteSel").onchange = (e) => { ui.site = e.target.value; ui.view = "overzicht"; saveUi(); render(); };
+$("#siteSel").onchange = (e) => { if (e.target.value) { ui.site = e.target.value; ui.view = "overzicht"; saveUi(); } else ui.view = "start"; render(); window.scrollTo({ top: 0 }); };
+// Klik op het logo of de naam: terug naar het beginscherm.
+$("#home").onclick = () => { ui.view = "start"; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); };
 
 // ---------- Excel-verslag ----------
 const EXCELJS_URL = "vendor/exceljs-4.4.0.min.js";
