@@ -203,3 +203,7 @@ on conflict (id) do nothing;
 insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, omschrijving) values
   ('psychiatrisch-ziekenhuis-personeelsrestaurant', 'psychiatrisch-ziekenhuis', 'Personeelsrestaurant', 'restaurant', 11, 'Restaurant voor medewerkers')
 on conflict (id) do nothing;
+
+-- Maximale bezetting WZC-Huize Nazareth (29/10/2026).
+update public.vv_afdelingen set capaciteit = 26 where id = 'wzc-huize-nazareth-sint-franciscus' and capaciteit is null;
+update public.vv_afdelingen set capaciteit = 36 where id = 'wzc-huize-nazareth-heilig-hart' and capaciteit is null;
