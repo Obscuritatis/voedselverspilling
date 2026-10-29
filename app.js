@@ -380,7 +380,7 @@ function renderAfdeling(main, a) {
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
-      ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · ${ps.porties} porties voor ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}`, "t-amber")}
+      ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · klaargemaakt voor ${ps.porties}, ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}`, "t-amber")}
       ${stat("vlag", act.filter((x) => x.status !== "Afgerond").length, `open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden`, "t-green")}
     </div>
     <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${icon({ metingen: "weegschaal", gevoeligheden: "lamp", acties: "vlag" }[k])}${l}</button>`).join("")}</div>
@@ -401,7 +401,7 @@ function tabMetingen(body, a, ms, msP) {
         <label>Datum<input type="date" id="mDatum" value="${esc(ui.mDatum || today())}" required></label>
         <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, ui.mMaaltijd || "Middagmaal")}</select></label>
         <div class="full stap"><span>1</span>Aantallen voor deze maaltijd, één keer</div>
-        <label>Geleverde porties<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
+        <label>Klaargemaakt voor (personen)<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
         <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : a.type === "dagverzorging" ? "e gasten" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
         <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" id="mAantBewaar"${dis()}>Aantallen bewaren</button><span class="hint" id="mAantInfo"></span></div>
         <div class="full stap"><span>2</span>Wat weeg je?</div>
@@ -419,9 +419,9 @@ function tabMetingen(body, a, ms, msP) {
   ${(() => {
     const mt = ofAfd(S.maaltijden, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
     if (!mt.length) return "";
-    return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Porties</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
+    return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Klaargemaakt</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
     ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td><td class="num">${kg(k)}</td><td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
-    </tbody></table></div><p class="hint" style="margin-top:8px">Verschil = geleverde porties min aanwezigen. Een plus betekent porties te veel.</p></section>`;
+    </tbody></table></div><p class="hint" style="margin-top:8px">Verschil = klaargemaakt min aanwezigen. Een plus betekent dat er te veel klaargemaakt werd.</p></section>`;
   })()}
   <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente wegingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
     ${ms.length ? `<div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th>Soort</th><th>Component</th><th style="text-align:right">Gewicht</th><th>Opmerking</th><th></th></tr></thead><tbody>
@@ -440,7 +440,7 @@ function tabMetingen(body, a, ms, msP) {
   // Bewaart porties en aanwezigen als ze ingevuld en gewijzigd zijn. Geeft false bij een fout.
   const bewaarAantallen = async (melding) => {
     const porties = getalOfNull($("#mPorties").value), aanwezig = getalOfNull($("#mAanwezig").value), h = huidig();
-    if (porties == null && aanwezig == null) { if (melding) toast("Vul de geleverde porties of de aanwezigen in."); return true; }
+    if (porties == null && aanwezig == null) { if (melding) toast("Vul in voor hoeveel personen er klaargemaakt werd, of de aanwezigen."); return true; }
     if (h && h.porties === porties && h.aanwezig === aanwezig) { if (melding) toast("Aantallen zijn al bewaard."); return true; }
     const rij = naarDb({ siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, porties, aanwezig });
     return write(() => sb.from("vv_maaltijden").upsert(rij, { onConflict: "afdeling_id,datum,maaltijd" }), melding ? "Aantallen bewaard" : null);
@@ -833,7 +833,7 @@ async function exporteerVerslag(afdId) {
     const gp = gramPerPlaats(a, m), pa = perAanwezige(a.id, m), ps = portiesSaldo(a.id);
     return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", huidig(a) ?? "", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), ps ? ps.porties : "", ps ? ps.aanwezig : "", pa == null ? "" : Math.round(pa), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
   });
-  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Huidige bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per bewoner per meetdag (g)", , "0"], ["Porties geleverd"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
+  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Huidige bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per bewoner per meetdag (g)", , "0"], ["Klaargemaakt voor"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
   rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(16), XL.focus[focusInfo(afd[k])[0]]));
   if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = afd.reduce((n, x) => n + (huidig(x) || 0), 0) || ""; t.getCell(5).value = kgNum(totKg); t.getCell(5).numFmt = "0.0"; t.getCell(6).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
   const verdeling = (titel, key, labels, lijst = ms) => {
@@ -861,8 +861,8 @@ async function exporteerVerslag(afdId) {
 
   // Maaltijden (porties en aanwezigen)
   const mts = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
-  const mb = blad(wb, "Maaltijden", "Maaltijden: porties en aanwezigen", info, [12, 20, 14, 12, 12, 12, 12, 16], XL.stroom.overproductie[1]);
-  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Porties"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
+  const mb = blad(wb, "Maaltijden", "Maaltijden: klaargemaakt en aanwezig", info, [12, 20, 14, 12, 12, 12, 12, 16], XL.stroom.overproductie[1]);
+  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Klaargemaakt voor"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
     mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
     (r, k) => { const x = mts[k]; if (x.porties != null && x.aanwezig != null && x.porties !== x.aanwezig) kleur(r.getCell(6), x.porties > x.aanwezig ? XL.tegel.amber : XL.tegel.blauw); });
   mb.ws.views = [{ state: "frozen", ySplit: mb.start, showGridLines: false }];
@@ -995,7 +995,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261029b";
+const APP_VERSIE = "20261029c";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
