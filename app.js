@@ -141,6 +141,12 @@ function inPeriode(m) {
 }
 const siteAfd = () => S.afdelingen.filter((a) => a.siteId === ui.site).sort((a, b) => (a.volgorde ?? 99) - (b.volgorde ?? 99) || a.naam.localeCompare(b.naam));
 const ofAfd = (list, id) => list.filter((x) => x.afdelingId === id);
+// Openingsdagen: 1 = maandag … 7 = zondag; geen dagen ingesteld = elke dag open.
+const DAGEN = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"];
+const isoDag = (datum) => ((new Date(datum + "T12:00:00").getDay() + 6) % 7) + 1;
+const openDagen = (a) => (a.openDagen || []).map(Number).filter((d) => d >= 1 && d <= 7).sort();
+const openOp = (a, datum) => !openDagen(a).length || openDagen(a).includes(isoDag(datum));
+const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
 const MENU_COMP = ["Soep", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert"];
 const kortComp = (c) => c.split(/[,(]/)[0].trim();
@@ -376,7 +382,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${openDagen(a).length ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
@@ -400,6 +406,7 @@ function tabMetingen(body, a, ms, msP) {
       <form class="f" id="fMeting">
         <label>Datum<input type="date" id="mDatum" value="${esc(ui.mDatum || today())}" required></label>
         <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, ui.mMaaltijd || "Middagmaal")}</select></label>
+        <p class="full dicht-melding" id="mDicht" hidden></p>
         <div class="full stap"><span>1</span>Aantallen voor deze maaltijd, één keer</div>
         <label>Klaargemaakt voor (personen)<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
         <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : a.type === "dagverzorging" ? "e gasten" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
@@ -474,12 +481,20 @@ function tabMetingen(body, a, ms, msP) {
     if (!ops.length) { tekenMenu(); return; }
     await write(async () => (await Promise.all(ops.map((f) => f()))).find((x) => x.error) || { error: null }, "Menu bewaard");
   };
-  vulAantallen(); tekenMenu();
-  $("#mDatum").onchange = () => { ui.mDatum = $("#mDatum").value; vulAantallen(); tekenMenu(); };
+  // Op een dag dat de afdeling gesloten is, kan je niets invullen behalve een andere datum.
+  const zetOpen = () => {
+    const datum = $("#mDatum").value || today(), dicht = !openOp(a, datum), m = $("#mDicht");
+    m.hidden = !dicht;
+    m.textContent = dicht ? `${a.naam} is enkel open op ${openTekst(a)}. Op ${DAGEN[isoDag(datum) - 1]} kan je niets invullen; kies een andere datum.` : "";
+    $("#fMeting").querySelectorAll("input, select, button").forEach((el) => { if (el.id !== "mDatum" && !el.closest("#mMenu")) el.disabled = dicht || !canWrite; });
+  };
+  vulAantallen(); tekenMenu(); zetOpen();
+  $("#mDatum").onchange = () => { ui.mDatum = $("#mDatum").value; vulAantallen(); tekenMenu(); zetOpen(); };
   $("#mMaaltijd").onchange = () => { ui.mMaaltijd = $("#mMaaltijd").value; vulAantallen(); tekenMenu(); };
-  $("#mAantBewaar").onclick = () => bewaarAantallen(true);
+  $("#mAantBewaar").onclick = () => (openOp(a, $("#mDatum").value || today()) ? bewaarAantallen(true) : toast(`${a.naam} is enkel open op ${openTekst(a)}.`));
   $("#fMeting").onsubmit = async (e) => {
     e.preventDefault();
+    if (!openOp(a, $("#mDatum").value || today())) { toast(`${a.naam} is enkel open op ${openTekst(a)}.`); return; }
     const val = Number(String($("#mKg").value).replace(",", "."));
     if (!(val > 0)) { toast("Vul een gewicht in groter dan 0 kg."); return; }
     const rec = { siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, stroom: body.querySelector("input[name=mStroom]:checked")?.value || "bordrest", component: body.querySelector("input[name=mComp]:checked")?.value || "Gemengd of onbekend", kg: val, opmerking: $("#mOpm").value.trim() };
@@ -611,6 +626,7 @@ function beheerHtml() {
         <label class="hint" style="display:flex;gap:6px;align-items:center">Huidige bezetting${huidigVeld(a, "")}</label>
         <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
       </div>
+      <div class="open-dagen hint" data-open="${esc(a.id)}"><span>Open op</span>${DAGEN.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${openDagen(a).includes(i + 1) ? " checked" : ""}${dis()}><span>${d.slice(0, 2)}</span></label>`).join("")}<span>${openDagen(a).length ? "" : "(niets aangeduid = elke dag)"}</span></div>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
     <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
@@ -661,6 +677,10 @@ function bindBeheer() {
   document.querySelectorAll("[data-cap]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ capaciteit: getal(inp.value) }).eq("id", inp.dataset.cap), "Bezetting bewaard")));
   document.querySelectorAll("[data-kv]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ kortverblijf: getal(inp.value) }).eq("id", inp.dataset.kv), "Kortverblijven bewaard")));
   document.querySelectorAll("[data-info]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ aantallen_info: inp.value.trim() }).eq("id", inp.dataset.info), "Bewaard")));
+  document.querySelectorAll("[data-open]").forEach((box) => box.querySelectorAll("input").forEach((inp) => (inp.onchange = () => {
+    const d = [...box.querySelectorAll("input:checked")].map((x) => Number(x.value));
+    write(() => sb.from("vv_afdelingen").update({ open_dagen: d.length && d.length < 7 ? d : null }).eq("id", box.dataset.open), "Openingsdagen bewaard");
+  })));
   document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
   bindDeletes(document);
 }
@@ -995,7 +1015,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261029c";
+const APP_VERSIE = "20261029d";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
