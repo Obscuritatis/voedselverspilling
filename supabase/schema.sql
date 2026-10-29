@@ -225,3 +225,7 @@ alter table public.vv_afdelingen add column if not exists open_dagen smallint[];
 alter table public.vv_afdelingen drop constraint if exists vv_afdelingen_open_dagen_check;
 alter table public.vv_afdelingen add constraint vv_afdelingen_open_dagen_check check (open_dagen <@ array[1, 2, 3, 4, 5, 6, 7]::smallint[]);
 update public.vv_afdelingen set open_dagen = array[1, 4]::smallint[] where id = 'wzc-huize-nazareth-prieeltje' and open_dagen is null;
+-- Maximale bezetting Sint-Jozef en Sint-Elisabeth, totaal verdeeld over de verdiepen (29/10/2026).
+update public.vv_afdelingen set capaciteit = 21 where id in ('wzc-huize-nazareth-sint-jozef', 'wzc-huize-nazareth-sint-jozef-3') and capaciteit is null;
+update public.vv_afdelingen set capaciteit = 23 where id = 'wzc-huize-nazareth-sint-elisabeth' and capaciteit is null;
+update public.vv_afdelingen set capaciteit = 22 where id = 'wzc-huize-nazareth-sint-elisabeth-2' and capaciteit is null;
