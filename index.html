@@ -293,6 +293,14 @@ form.f .tegel { position: relative; display: flex; flex-direction: row; align-it
 form.f .tegel:has(input:checked) { border-color: var(--sc); background: color-mix(in srgb, var(--sc) 12%, var(--surface)) }
 .tegel:has(input:focus-visible), .chipkeuze label:has(input:focus-visible) { outline: 2px solid var(--accent-2); outline-offset: 2px }
 .chipkeuze { display: flex; flex-wrap: wrap; gap: 6px }
+/* Menu van de maaltijd, bij het wegen */
+.menu-blok { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px }
+.menu-kop { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px }
+.menu-lijst { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px }
+.menu-lijst li { display: flex; gap: 10px }
+.menu-lijst li span { min-width: 70px; color: var(--muted); font-size: .84rem; padding-top: 1px }
+.menu-velden { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px }
+.chipkeuze .gerecht { font-style: normal; opacity: .8 }
 form.f .chipkeuze label { position: relative; display: inline-flex; cursor: pointer; font-weight: 500 }
 .chipkeuze span { padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-size: .84rem }
 .chipkeuze input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent) }
@@ -370,7 +378,7 @@ td.nowrap { white-space: nowrap }
 
 <script src="vendor/supabase-2.116.0.js"></script>
 <!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
-<script src="config.js?v=20261027n"></script>
-<script src="app.js?v=20261027n"></script>
+<script src="config.js?v=20261029a"></script>
+<script src="app.js?v=20261029a"></script>
 </body>
 </html>

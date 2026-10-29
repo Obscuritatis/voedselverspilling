@@ -102,17 +102,30 @@ create table if not exists public.vv_maaltijden (
   unique (afdeling_id, datum, maaltijd)
 );
 
+-- Menu per site, dag en maaltijd: één gerecht per component.
+create table if not exists public.vv_menus (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  datum date not null,
+  maaltijd text not null default 'Middagmaal',
+  component text not null,
+  gerecht text not null check (length(gerecht) between 1 and 200),
+  aangemaakt timestamptz not null default now(),
+  aangemaakt_door uuid default auth.uid(),
+  unique (site_id, datum, maaltijd, component)
+);
 alter table public.vv_sites enable row level security;
 alter table public.vv_afdelingen enable row level security;
 alter table public.vv_metingen enable row level security;
 alter table public.vv_gevoeligheden enable row level security;
 alter table public.vv_acties enable row level security;
 alter table public.vv_maaltijden enable row level security;
+alter table public.vv_menus enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties', 'vv_maaltijden'] loop
+  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties', 'vv_maaltijden', 'vv_menus'] loop
     execute format('drop policy if exists %I on public.%I', t || ' voor collega''s', t);
     execute format('create policy %I on public.%I for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang())', t || ' voor collega''s', t);
   end loop;
@@ -122,7 +135,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties', 'vv_maaltijden'] loop
+  foreach t in array array['vv_sites', 'vv_afdelingen', 'vv_metingen', 'vv_gevoeligheden', 'vv_acties', 'vv_maaltijden', 'vv_menus'] loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     exception when duplicate_object then null;
