@@ -442,8 +442,11 @@ function tabMetingen(body, a, ms, msP) {
   const vulAantallen = () => {
     const h = huidig();
     // porties is het totaal; standaard = totaal min dieet/gemixt.
-    $("#mPorties").value = h?.porties != null ? h.porties - (h.portiesDieet || 0) : ""; $("#mDieet").value = h?.portiesDieet ?? ""; $("#mAanwezig").value = h?.aanwezig ?? "";
-    $("#mAantInfo").textContent = h ? "Al ingevuld voor deze maaltijd; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
+    $("#mPorties").value = h?.porties != null ? h.porties - (h.portiesDieet || 0) : ""; $("#mDieet").value = h?.portiesDieet ?? "";
+    // Zonder bewaarde aantallen nemen we de huidige bezetting van de afdeling over als aanwezigen.
+    const vanBezetting = h?.aanwezig == null && a.huidigeBezetting != null;
+    $("#mAanwezig").value = h?.aanwezig ?? a.huidigeBezetting ?? "";
+    $("#mAantInfo").textContent = h ? "Al ingevuld voor deze maaltijd; pas aan indien nodig." : vanBezetting ? "Aanwezigen overgenomen van de huidige bezetting; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
   };
   const getalOfNull = (v) => (v === "" || v == null ? null : Math.max(0, Math.round(Number(v)) || 0));
   // Bewaart porties en aanwezigen als ze ingevuld en gewijzigd zijn. Geeft false bij een fout.
@@ -1021,7 +1024,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030a";
+const APP_VERSIE = "20261030b";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
