@@ -81,7 +81,7 @@ const SUG_ACT = [
   ["Overschot verwerken in een volgende maaltijd", "Niet-uitgeserveerde componenten binnen de HACCP-regels verwerken in soep of dagschotel.", "midden", "laag"],
 ];
 
-const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: [], maaltijden: [], menus: [], loaded: {} };
+const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: [], maaltijden: [], menus: [], producten: [], loaded: {} };
 let sb = null, sessie = null, ready = false, canWrite = true;
 const ui = { site: null, view: "start", tab: "metingen", periode: 30, prefillAct: null };
 try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode) ui.periode = s.periode; } catch (e) {}
@@ -100,7 +100,7 @@ function leesAdres() {
 leesAdres();
 function schrijfAdres() {
   if (location.hash && !location.hash.startsWith("#/")) return;
-  const h = ui.view === "start" ? "#/" : `#/${encodeURIComponent(ui.site || "")}/${encodeURIComponent(ui.view)}${ui.view !== "overzicht" && ui.view !== "kies" && ui.view !== "beheer" ? "/" + encodeURIComponent(ui.tab) : ""}`;
+  const h = ui.view === "start" ? "#/" : `#/${encodeURIComponent(ui.site || "")}/${encodeURIComponent(ui.view)}${ui.view !== "overzicht" && ui.view !== "kies" && ui.view !== "beheer" && ui.view !== "productie" ? "/" + encodeURIComponent(ui.tab) : ""}`;
   if (location.hash === h) return;
   if (location.hash) history.pushState(null, "", h); else history.replaceState(null, "", h);
 }
@@ -154,8 +154,54 @@ const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); if (
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
 const MENU_COMP = ["Soep", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert"];
 const kortComp = (c) => c.split(/[,(]/)[0].trim();
-const menuVan = (siteId, datum, maaltijd) => S.menus.filter((x) => x.siteId === siteId && x.datum === datum && x.maaltijd === maaltijd);
-const gerechtVan = (m) => { const siteId = m.siteId || S.afdelingen.find((a) => a.id === m.afdelingId)?.siteId; return S.menus.find((x) => x.siteId === siteId && x.datum === m.datum && x.maaltijd === m.maaltijd && x.component === m.component)?.gerecht || ""; };
+// Het centrale menu van de hoofdkeuken (zonder site) geldt overal; een gerecht dat voor een site apart ingevuld is, gaat voor.
+const menuVan = (siteId, datum, maaltijd) => {
+  const alle = S.menus.filter((x) => x.datum === datum && x.maaltijd === maaltijd), eigen = siteId ? alle.filter((x) => x.siteId === siteId) : [];
+  return [...eigen, ...alle.filter((x) => !x.siteId && !eigen.some((e) => e.component === x.component))];
+};
+const siteVanAfd = (afdId) => S.afdelingen.find((a) => a.id === afdId)?.siteId;
+const gerechtVan = (m) => menuVan(m.siteId || siteVanAfd(m.afdelingId), m.datum, m.maaltijd).find((x) => x.component === m.component)?.gerecht || "";
+// Productienormen van de hoofdkeuken: gram (of ml, gerekend als gram) per bewoner. Een samengestelde maaltijd telt haar onderdelen op.
+const productVan = (naam) => { const n = String(naam || "").trim().toLowerCase(); return n ? S.producten.find((x) => String(x.naam).trim().toLowerCase() === n) || null : null; };
+const onderdelenVan = (p) => (Array.isArray(p?.onderdelen) ? p.onderdelen : []).filter((o) => o && o.naam);
+const normVan = (p) => { if (!p) return null; const o = onderdelenVan(p); if (o.length) return o.reduce((t, x) => t + (Number(x.gram) || 0), 0) || null; return p.gram == null || p.gram === "" ? null : Number(p.gram); };
+const normTekst = (p) => { const n = normVan(p); return n == null ? "" : `${Math.round(n)} ${p.eenheid === "ml" ? "ml" : "g"} per persoon`; };
+// Wat de keuken voorzag voor één maaltijd van een afdeling, naast wat er gewogen werd.
+// Standaard: gram per persoon × standaardporties; Gemixt: alle gerechten samen × dieet/gemixte porties.
+function vergelijking(afdId, datum, maaltijd, ms) {
+  const mt = S.maaltijden.find((x) => x.afdelingId === afdId && x.datum === datum && x.maaltijd === maaltijd);
+  const menu = menuVan(siteVanAfd(afdId), datum, maaltijd);
+  if (!mt || mt.porties == null || !menu.length) return null;
+  const dieet = Number(mt.portiesDieet) || 0, standaard = Math.max(0, Number(mt.porties) - dieet);
+  const gew = ms.filter((m) => m.afdelingId === afdId && m.datum === datum && m.maaltijd === maaltijd);
+  const rijen = menu.map((x) => { const p = productVan(x.gerecht), n = normVan(p); return { component: x.component, gerecht: x.gerecht, norm: n, eenheid: p?.eenheid || "g", voorzien: n == null ? null : (n * standaard) / 1000, gewogen: sum(gew.filter((m) => m.component === x.component)) }; });
+  const somNorm = rijen.reduce((t, x) => t + (x.norm || 0), 0);
+  if (dieet && somNorm) rijen.push({ component: "Gemixt (alles samen)", gerecht: "dieet/gemixt", norm: somNorm, eenheid: "g", voorzien: (somNorm * dieet) / 1000, gewogen: sum(gew.filter((m) => m.component === "Gemixt (alles samen)")) });
+  const voorzien = somNorm ? (somNorm * Number(mt.porties)) / 1000 : null;
+  return { rijen, voorzien, gewogen: sum(gew), ontbreekt: rijen.filter((x) => x.norm == null).map((x) => x.gerecht) };
+}
+// Bewaart een menu voor één site, of centraal (siteId null). Een site bewaart enkel wat afwijkt van het centrale menu.
+function bewaarMenuRijen(siteId, datum, maaltijd, waarden, okMsg = "Menu bewaard") {
+  const eigen = S.menus.filter((x) => (x.siteId || null) === siteId && x.datum === datum && x.maaltijd === maaltijd);
+  const centraal = siteId ? menuVan(null, datum, maaltijd) : [], ops = [];
+  Object.entries(waarden).forEach(([c, v]) => {
+    const g = String(v || "").trim().slice(0, 200), h = eigen.find((x) => x.component === c);
+    if (h && g && g !== h.gerecht) ops.push(() => sb.from("vv_menus").update({ gerecht: g }).eq("id", h.id));
+    else if (h && (!g || (siteId && g === centraal.find((x) => x.component === c)?.gerecht))) ops.push(() => sb.from("vv_menus").delete().eq("id", h.id));
+    else if (!h && g && g !== centraal.find((x) => x.component === c)?.gerecht) ops.push(() => sb.from("vv_menus").insert(naarDb({ siteId, datum, maaltijd, component: c, gerecht: g })));
+  });
+  if (!ops.length) return Promise.resolve(true);
+  return write(async () => (await Promise.all(ops.map((f) => f()))).find((x) => x.error) || { error: null }, okMsg);
+}
+const productLijst = () => `<datalist id="dlProducten">${[...S.producten].sort((x, y) => x.naam.localeCompare(y.naam)).map((x) => `<option value="${esc(x.naam)}">`).join("")}</datalist>`;
+function vergelijkHtml(a, datum, maaltijd, ms) {
+  const v = vergelijking(a.id, datum, maaltijd, ms);
+  if (!v) return `<p class="hint" style="margin-top:8px">Vul "Klaargemaakt" in om te vergelijken met wat de keuken voorzag.</p>`;
+  return `<div class="vergelijk"><b>Voorzien en gewogen</b><table><thead><tr><th></th><th class="num">Voorzien</th><th class="num">Gewogen</th><th class="num">Terug</th></tr></thead><tbody>${v.rijen.map((x) => `<tr><td>${esc(x.gerecht)}</td><td class="num">${x.voorzien == null ? `<span class="hint">geen norm</span>` : kg(x.voorzien)}</td><td class="num">${kg(x.gewogen)}</td><td class="num">${x.voorzien == null ? "–" : pct(x.gewogen, x.voorzien)}</td></tr>`).join("")}
+    <tr class="tot"><td>Totaal</td><td class="num">${v.voorzien == null ? "–" : kg(v.voorzien)}</td><td class="num">${kg(v.gewogen)}</td><td class="num">${pct(v.gewogen, v.voorzien)}</td></tr></tbody></table>
+    ${v.ontbreekt.length ? `<p class="hint">Nog geen gram per persoon voor ${esc(v.ontbreekt.join(", "))}: vul dat in bij Productie.</p>` : ""}</div>`;
+}
+const pct = (gew, voorz) => (voorz ? Math.round((gew / voorz) * 100) + "%" : "–");
 const sum = (arr) => arr.reduce((s, m) => s + (Number(m.kg) || 0), 0);
 function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[key]] || 0) + (Number(m.kg) || 0))); return Object.entries(g).sort((a, b) => b[1] - a[1]); }
 
@@ -221,11 +267,11 @@ function render() {
   // Zolang de gegevens nog laden, de gekozen site niet vervangen door de eerste.
   if (sites.length && (!ui.site || !sites.some((s) => s.id === ui.site))) ui.site = sites[0].id;
   $("#siteWrap").hidden = !sessie || !sites.length;
-  $("#siteSel").innerHTML = `<option value=""${ui.view === "start" ? " selected" : ""}>Alle sites</option>` + sites.map((s) => `<option value="${esc(s.id)}"${ui.view !== "start" && s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("");
+  $("#siteSel").innerHTML = `<option value=""${ui.view === "start" || ui.view === "productie" ? " selected" : ""}>Alle sites</option>` + sites.map((s) => `<option value="${esc(s.id)}"${ui.view !== "start" && ui.view !== "productie" && s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("");
   renderNav();
   const main = $("#main");
   document.body.classList.toggle("uit", !sessie);
-  document.body.classList.toggle("start", !!sessie && ready && (ui.view === "start" || ui.view === "kies") && sites.length > 0);
+  document.body.classList.toggle("start", !!sessie && ready && (ui.view === "start" || ui.view === "kies" || ui.view === "productie") && sites.length > 0);
   if (!sessie) { $("#nav").innerHTML = ""; main.innerHTML = viewLogin(); return; }
   if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
   if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
@@ -233,6 +279,7 @@ function render() {
   else if (ui.view === "kies") renderKies(main);
   else if (ui.view === "overzicht") renderOverzicht(main);
   else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
+  else if (ui.view === "productie") renderProductie(main, sites);
   else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) { ui.site = a.siteId; renderAfdeling(main, a); } else { ui.view = "overzicht"; renderOverzicht(main); } }
   schrijfAdres();
 }
@@ -273,10 +320,92 @@ function renderStart(main, sites) {
           return per.length ? per.map(esc).join("<br>") : "Nog geen afdelingen";
         })()}</span>
         <span class="site-pijl">${icon("pijl")}</span>
-      </button>`).join("")}</div>
+      </button>`).join("")}
+      <button type="button" class="site-tegel keuken" data-productie>
+        <span class="site-ic">${icon("weegschaal")}</span>
+        <span class="site-naam">Hoofdkeuken</span>
+        <span class="site-sub">Productie: menu en gram per persoon<br>voor alle sites</span>
+        <span class="site-pijl">${icon("pijl")}</span>
+      </button></div>
     ${totaalHtml(sites)}`;
+  main.querySelector("[data-productie]").onclick = () => { ui.view = "productie"; render(); window.scrollTo({ top: 0 }); };
   main.querySelectorAll("[data-jaar]").forEach((b) => (b.onclick = () => { ui.jaar = b.dataset.jaar; render(); }));
   main.querySelectorAll("[data-site]").forEach((b) => (b.onclick = () => { ui.site = b.dataset.site; ui.view = naSite(); saveUi(); render(); window.scrollTo({ top: 0 }); }));
+}
+
+// ---------- productie (hoofdkeuken, voor alle sites) ----------
+// Samenstelling als tekst: "Aardappelen 150, Ajuin 30" → [{ naam, gram }]. Geeft null bij een onleesbaar deel.
+function leesSamenstelling(t) {
+  const delen = String(t || "").split(/[,;+\n]/).map((x) => x.trim()).filter(Boolean);
+  const uit = delen.map((x) => { const m = x.match(/^(.*?)\s*(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram|ml)?$/i); return m && m[1].trim() ? { naam: m[1].trim().slice(0, 120), gram: Number(m[2].replace(",", ".")) } : null; });
+  return uit.includes(null) ? null : uit;
+}
+function renderProductie(main, sites) {
+  const datum = ui.pDatum || today(), maaltijd = ui.pMaaltijd || "Middagmaal", scope = sites.some((x) => x.id === ui.pSite) ? ui.pSite : "";
+  const menu = menuVan(scope || null, datum, maaltijd), van = (c) => menu.find((x) => x.component === c)?.gerecht || "";
+  const afwijk = [...new Set(S.menus.filter((x) => x.siteId && x.datum === datum && x.maaltijd === maaltijd).map((x) => x.siteId))].map((id) => S.sites.find((x) => x.id === id)?.naam).filter(Boolean);
+  const prods = [...S.producten].sort((x, y) => COMPONENTEN.indexOf(x.component) - COMPONENTEN.indexOf(y.component) || x.naam.localeCompare(y.naam));
+  const samTekst = (p) => onderdelenVan(p).map((o) => `${o.naam} ${o.gram}`).join(", ");
+  const normHint = (g) => { const p = productVan(g); return !g ? "" : !p ? "nog niet in de productenlijst" : normTekst(p) || "nog geen gram per persoon"; };
+  main.innerHTML = `
+    <button type="button" class="terug" data-naar="start">‹ Startscherm</button>
+    <div><div class="eyebrow">Hoofdkeuken</div><h2>Productie</h2><p class="hint">Eén keuken kookt voor alle sites. Vul per product in hoeveel er per persoon klaargemaakt wordt; bij het wegen vergelijkt de app dat met wat terugkomt.</p></div>
+    <section class="panel">
+      <div class="form-kop"><span class="kop-ic">${icon("kalender")}</span><div><h3>Menu</h3><p class="hint">Het centrale menu geldt voor alle sites. Wijkt een site af, kies ze bij "Voor" en vul enkel in wat anders is.</p></div></div>
+      <form class="f" id="pMenu">
+        <label>Datum<input type="date" id="pDatum" value="${esc(datum)}"></label>
+        <label>Maaltijd<select id="pMaaltijd">${opts(MAALTIJDEN, maaltijd)}</select></label>
+        <label class="full">Voor<select id="pSite"><option value="">Alle sites (centraal menu)</option>${sites.map((st) => `<option value="${esc(st.id)}"${st.id === scope ? " selected" : ""}>Afwijkend voor ${esc(st.naam)}</option>`).join("")}</select></label>
+        ${MENU_COMP.map((c) => `<label>${esc(kortComp(c))}<input data-pmenu="${esc(c)}" list="dlProducten" maxlength="200" value="${esc(van(c))}"><span class="hint" data-pnorm="${esc(c)}">${esc(normHint(van(c)))}</span></label>`).join("")}
+        <div class="full" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="submit" class="primary"${dis()}>Menu bewaren</button><span class="hint">${afwijk.length ? "Afwijkend menu op deze dag voor: " + esc(afwijk.join(", ")) + "." : scope ? "Wat gelijk is aan het centrale menu, wordt niet apart bewaard." : ""}</span></div>
+      </form>${productLijst()}
+    </section>
+    <section class="panel" style="margin-top:24px">
+      <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Producten en gram per persoon</h3><p class="hint">Samengestelde maaltijd: vul de samenstelling in (bv. "Aardappelen 150, Ajuin 30"); het totaal per persoon wordt dan opgeteld. Wordt bewaard zodra je het veld verlaat.</p></div></div>
+      ${prods.length ? `<div class="tablewrap"><table class="producten"><thead><tr><th>Product</th><th>Onderdeel</th><th>Per persoon</th><th>Samenstelling</th><th></th></tr></thead><tbody>
+      ${prods.map((p) => { const sam = onderdelenVan(p).length; return `<tr>
+        <td><input data-pnaam="${esc(p.id)}" value="${esc(p.naam)}" maxlength="120" aria-label="Naam"${dis()}></td>
+        <td><select data-pcomp="${esc(p.id)}" aria-label="Onderdeel ${esc(p.naam)}"${dis()}>${opts(COMPONENTEN, p.component)}</select></td>
+        <td><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-pgram="${esc(p.id)}" aria-label="Per persoon ${esc(p.naam)}" value="${sam ? esc(Math.round(normVan(p) || 0)) : esc(p.gram ?? "")}"${sam ? " disabled title=\"Opgeteld uit de samenstelling\"" : dis()}><select data-peenh="${esc(p.id)}" aria-label="Eenheid ${esc(p.naam)}"${dis()}>${opts(["g", "ml"], p.eenheid || "g")}</select></span></td>
+        <td><input data-psam="${esc(p.id)}" value="${esc(samTekst(p))}" placeholder="enkel bij samengestelde maaltijd" aria-label="Samenstelling ${esc(p.naam)}"${dis()}></td>
+        <td>${canWrite ? `<button class="ghost" data-del="producten/${esc(p.id)}" aria-label="Verwijder ${esc(p.naam)}">✕</button>` : ""}</td></tr>`; }).join("")}
+      </tbody></table></div>` : `<div class="empty">Nog geen producten. Voeg er hieronder een toe.</div>`}
+      <form class="f" id="pNieuw" style="margin-top:16px">
+        <label>Nieuw product<input id="pnNaam" maxlength="120" required placeholder="bv. Kroketten"></label>
+        <label>Onderdeel<select id="pnComp">${opts(COMPONENTEN, "Zetmeel (aardappel, pasta, rijst)")}</select></label>
+        <label>Per persoon<input type="number" id="pnGram" min="0" step="1" inputmode="numeric"></label>
+        <label>Eenheid<select id="pnEenh">${opts(["g", "ml"], "g")}</select></label>
+        <label class="full">Samenstelling (optioneel)<input id="pnSam" placeholder="bv. Aardappelen 150, Ajuin 30"></label>
+        <div class="full"><button type="submit"${dis()}>Product toevoegen</button></div>
+      </form>
+    </section>`;
+  main.querySelector("[data-naar]").onclick = () => { ui.view = "start"; render(); window.scrollTo({ top: 0 }); };
+  $("#pDatum").onchange = () => { ui.pDatum = $("#pDatum").value || today(); render(); };
+  $("#pMaaltijd").onchange = () => { ui.pMaaltijd = $("#pMaaltijd").value; render(); };
+  $("#pSite").onchange = () => { ui.pSite = $("#pSite").value; render(); };
+  main.querySelectorAll("[data-pmenu]").forEach((i) => (i.oninput = () => (main.querySelector(`[data-pnorm="${CSS.escape(i.dataset.pmenu)}"]`).textContent = normHint(i.value.trim()))));
+  $("#pMenu").onsubmit = (e) => {
+    e.preventDefault();
+    const waarden = {};
+    main.querySelectorAll("[data-pmenu]").forEach((i) => (waarden[i.dataset.pmenu] = i.value));
+    bewaarMenuRijen(scope || null, datum, maaltijd, waarden);
+  };
+  const upd = (id, v, msg) => write(() => sb.from("vv_producten").update(v).eq("id", id), msg);
+  const getal = (v) => (v === "" || v == null ? null : Math.max(0, Math.round(Number(String(v).replace(",", "."))) || 0));
+  main.querySelectorAll("[data-pnaam]").forEach((i) => (i.onchange = () => { const v = i.value.trim(); if (!v) { toast("Een product heeft een naam nodig."); return; } upd(i.dataset.pnaam, { naam: v }, "Naam bewaard"); }));
+  main.querySelectorAll("[data-pcomp]").forEach((i) => (i.onchange = () => upd(i.dataset.pcomp, { component: i.value }, "Onderdeel bewaard")));
+  main.querySelectorAll("[data-pgram]").forEach((i) => (i.onchange = () => upd(i.dataset.pgram, { gram: getal(i.value) }, "Bewaard")));
+  main.querySelectorAll("[data-peenh]").forEach((i) => (i.onchange = () => upd(i.dataset.peenh, { eenheid: i.value }, "Bewaard")));
+  main.querySelectorAll("[data-psam]").forEach((i) => (i.onchange = () => { const o = leesSamenstelling(i.value); if (!o) { toast('Schrijf de samenstelling als: Aardappelen 150, Ajuin 30'); return; } upd(i.dataset.psam, { onderdelen: o }, "Samenstelling bewaard"); }));
+  $("#pNieuw").onsubmit = async (e) => {
+    e.preventDefault();
+    const o = leesSamenstelling($("#pnSam").value);
+    if (!o) { toast('Schrijf de samenstelling als: Aardappelen 150, Ajuin 30'); return; }
+    const rec = { naam: $("#pnNaam").value.trim().slice(0, 120), component: $("#pnComp").value, gram: getal($("#pnGram").value), eenheid: $("#pnEenh").value, onderdelen: o };
+    if (!rec.naam) return;
+    if (await write(() => sb.from("vv_producten").insert(rec), `${rec.naam} toegevoegd`)) $("#pNieuw").reset();
+  };
+  bindDeletes(main);
 }
 
 // Op gsm kies je na de site eerst een afdeling uit een eenvoudige lijst (view "kies").
@@ -431,8 +560,8 @@ function tabMetingen(body, a, ms, msP) {
   ${(() => {
     const mt = ofAfd(S.maaltijden, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
     if (!mt.length) return "";
-    return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Klaargemaakt</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
-    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}${x.portiesDieet ? `<br><span class="hint">waarvan ${x.portiesDieet} dieet/gemixt</span>` : ""}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td><td class="num">${kg(k)}</td><td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
+    return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Klaargemaakt</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Voorzien</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Terug</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
+    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}${x.portiesDieet ? `<br><span class="hint">waarvan ${x.portiesDieet} dieet/gemixt</span>` : ""}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td>${(() => { const vg = vergelijking(x.afdelingId, x.datum, x.maaltijd, ms), vz = vg?.voorzien; return `<td class="num">${vz == null ? "–" : kg(vz)}</td><td class="num">${kg(k)}</td><td class="num">${vz == null ? "–" : pct(k, vz)}</td>`; })()}<td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
     </tbody></table></div><p class="hint" style="margin-top:8px">Verschil = klaargemaakt min aanwezigen. Een plus betekent dat er te veel klaargemaakt werd.</p></section>`;
   })()}
   <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente wegingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
@@ -475,28 +604,24 @@ function tabMetingen(body, a, ms, msP) {
     body.querySelectorAll("[data-gerecht]").forEach((el) => (el.textContent = van(el.dataset.gerecht) ? " · " + van(el.dataset.gerecht) : ""));
     const box = $("#mMenu");
     if (ui.menuOpen) {
-      box.innerHTML = `<div class="menu-kop"><b>Menu van ${esc($("#mMaaltijd").value.toLowerCase())}</b><span class="hint">geldt voor alle afdelingen van ${esc(site?.naam || "de site")}</span></div>
-        <div class="menu-velden">${MENU_COMP.map((c) => `<label>${esc(kortComp(c))}<input data-menu="${esc(c)}" maxlength="200" value="${esc(van(c))}"></label>`).join("")}</div>
+      box.innerHTML = `<div class="menu-kop"><b>Menu van ${esc($("#mMaaltijd").value.toLowerCase())}</b><span class="hint">wat je hier wijzigt, geldt enkel voor ${esc(site?.naam || "deze site")}; het centrale menu pas je aan bij Productie</span></div>
+        <div class="menu-velden">${MENU_COMP.map((c) => `<label>${esc(kortComp(c))}<input data-menu="${esc(c)}" list="dlProducten" maxlength="200" value="${esc(van(c))}"></label>`).join("")}</div>${productLijst()}
         <div style="display:flex;gap:8px;margin-top:10px"><button type="button" id="mMenuBewaar"${dis()}>Menu bewaren</button><button type="button" class="ghost" id="mMenuSluit">Annuleren</button></div>`;
       $("#mMenuSluit").onclick = () => { ui.menuOpen = false; tekenMenu(); };
       $("#mMenuBewaar").onclick = bewaarMenu;
       box.querySelectorAll("[data-menu]").forEach((i) => (i.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); bewaarMenu(); } }));
     } else {
       box.innerHTML = `<div class="menu-kop"><b>Menu</b>${canWrite ? `<button type="button" class="ghost" id="mMenuOpen">${menu.length ? "Aanpassen" : "Menu invullen"}</button>` : ""}</div>
-        ${menu.length ? `<ul class="menu-lijst">${MENU_COMP.filter(van).map((c) => `<li><span>${esc(kortComp(c))}</span>${esc(van(c))}</li>`).join("")}</ul>` : `<span class="hint">Nog geen menu voor deze maaltijd.</span>`}`;
+        ${menu.length ? `<ul class="menu-lijst">${MENU_COMP.filter(van).map((c) => `<li><span>${esc(kortComp(c))}</span>${esc(van(c))}${(() => { const t = normTekst(productVan(van(c))); return t ? ` <em class="hint">· ${esc(t)}</em>` : ""; })()}</li>`).join("")}</ul>${vergelijkHtml(a, $("#mDatum").value || today(), $("#mMaaltijd").value, ms)}` : `<span class="hint">Nog geen menu voor deze maaltijd.</span>`}`;
       const k = $("#mMenuOpen"); if (k) k.onclick = () => { ui.menuOpen = true; tekenMenu(); box.querySelector("input")?.focus(); };
     }
   };
   const bewaarMenu = async () => {
-    const datum = $("#mDatum").value || today(), maaltijd = $("#mMaaltijd").value, menu = menuVan(a.siteId, datum, maaltijd), ops = [];
-    $("#mMenu").querySelectorAll("[data-menu]").forEach((i) => {
-      const c = i.dataset.menu, g = i.value.trim().slice(0, 200), h = menu.find((x) => x.component === c);
-      if (g && g !== h?.gerecht) ops.push(() => sb.from("vv_menus").upsert(naarDb({ siteId: a.siteId, datum, maaltijd, component: c, gerecht: g }), { onConflict: "site_id,datum,maaltijd,component" }));
-      else if (!g && h) ops.push(() => sb.from("vv_menus").delete().eq("id", h.id));
-    });
+    const waarden = {};
+    $("#mMenu").querySelectorAll("[data-menu]").forEach((i) => (waarden[i.dataset.menu] = i.value));
     ui.menuOpen = false;
-    if (!ops.length) { tekenMenu(); return; }
-    await write(async () => (await Promise.all(ops.map((f) => f()))).find((x) => x.error) || { error: null }, "Menu bewaard");
+    await bewaarMenuRijen(a.siteId, $("#mDatum").value || today(), $("#mMaaltijd").value, waarden);
+    tekenMenu();
   };
   // Op een dag dat de afdeling gesloten is, kan je niets invullen behalve een andere datum.
   const zetOpen = () => {
@@ -906,18 +1031,19 @@ async function exporteerVerslag(afdId) {
 
   // Maaltijden (porties en aanwezigen)
   const mts = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
-  const mb = blad(wb, "Maaltijden", "Maaltijden: klaargemaakt en aanwezig", info, [12, 20, 14, 12, 14, 14, 12, 12, 12, 16], XL.stroom.overproductie[1]);
-  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Standaard"], ["Dieet/gemixt"], ["Klaargemaakt totaal"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
-    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties != null ? x.porties - (x.portiesDieet || 0) : "", x.portiesDieet ?? "", x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
+  const mb = blad(wb, "Maaltijden", "Maaltijden: klaargemaakt en aanwezig", info, [12, 20, 14, 12, 14, 14, 12, 12, 13, 13, 10, 16], XL.stroom.overproductie[1]);
+  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Standaard"], ["Dieet/gemixt"], ["Klaargemaakt totaal"], ["Aanwezig"], ["Verschil"], ["Voorzien (kg)", , "0.0"], ["Gewogen (kg)", , "0.0"], ["Terug", , "0%"], ["Per aanwezige (g)", , "0"]],
+    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties != null ? x.porties - (x.portiesDieet || 0) : "", x.portiesDieet ?? "", x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", ...(() => { const vz = vergelijking(x.afdelingId, x.datum, x.maaltijd, ms)?.voorzien; return [vz == null ? "" : kgNum(vz), kgNum(k), vz ? k / vz : ""]; })(), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
     (r, k) => { const x = mts[k]; if (x.porties != null && x.aanwezig != null && x.porties !== x.aanwezig) kleur(r.getCell(8), x.porties > x.aanwezig ? XL.tegel.amber : XL.tegel.blauw); });
   mb.ws.views = [{ state: "frozen", ySplit: mb.start, showGridLines: false }];
 
   // Menu's van de site, met wat er per gerecht gewogen werd
-  const mns = S.menus.filter((x) => x.siteId === ui.site && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd) || COMPONENTEN.indexOf(x.component) - COMPONENTEN.indexOf(y.component));
+  const mnKeys = [...new Set(S.menus.filter((x) => (!x.siteId || x.siteId === ui.site) && inPeriode(x)).map((x) => x.datum + "|" + x.maaltijd))];
+  const mns = mnKeys.flatMap((k) => { const [d, mt] = k.split("|"); return menuVan(ui.site, d, mt); }).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd) || COMPONENTEN.indexOf(x.component) - COMPONENTEN.indexOf(y.component));
   if (mns.length) {
-    const mn = blad(wb, "Menu", "Menu en gewogen per gerecht", info, [12, 14, 30, 30, 14], XL.kop);
-    tabel(mn.ws, mn.start, [["Datum"], ["Maaltijd"], ["Component"], ["Gerecht"], ["Gewogen (kg)", , "0.0"]],
-      mns.map((x) => [fmtD(x.datum), x.maaltijd, x.component, x.gerecht, kgNum(sum(ms.filter((y) => y.datum === x.datum && y.maaltijd === x.maaltijd && y.component === x.component)))]));
+    const mn = blad(wb, "Menu", "Menu en gewogen per gerecht", info, [12, 14, 30, 30, 16, 14, 14], XL.kop);
+    tabel(mn.ws, mn.start, [["Datum"], ["Maaltijd"], ["Component"], ["Gerecht"], ["Per persoon (g of ml)", , "0"], ["Menu"], ["Gewogen (kg)", , "0.0"]],
+      mns.map((x) => [fmtD(x.datum), x.maaltijd, x.component, x.gerecht, normVan(productVan(x.gerecht)) ?? "", x.siteId ? "Afwijkend voor de site" : "Centraal", kgNum(sum(ms.filter((y) => y.datum === x.datum && y.maaltijd === x.maaltijd && y.component === x.component)))]));
     mn.ws.views = [{ state: "frozen", ySplit: mn.start, showGridLines: false }];
   }
 
@@ -950,7 +1076,7 @@ async function exporteerVerslag(afdId) {
 }
 
 // ---------- opslag ----------
-const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties", maaltijden: "vv_maaltijden", menus: "vv_menus" };
+const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties", maaltijden: "vv_maaltijden", menus: "vv_menus", producten: "vv_producten" };
 // Database gebruikt snake_case (site_id), de app camelCase (siteId).
 const vanDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]));
 const naarDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase()), v]));
@@ -964,7 +1090,7 @@ async function selectAlles(tabel) {
     if (data.length < 1000) return { data: uit, error: null };
   }
 }
-const OPTIONEEL = { maaltijden: ["Porties en aanwezigen", "supabase/2026-10-20-maaltijden.sql"], menus: ["Menu's", "supabase/2026-10-29-menu.sql"] };
+const OPTIONEEL = { maaltijden: ["Porties en aanwezigen", "supabase/2026-10-20-maaltijden.sql"], menus: ["Menu's", "supabase/2026-10-29-menu.sql"], producten: ["Producten van de hoofdkeuken", "supabase/2026-10-30-productie.sql"] };
 async function laadAlles() {
   const keys = Object.keys(TABELLEN);
   const res = await Promise.all(keys.map((k) => selectAlles(TABELLEN[k])));
@@ -1040,7 +1166,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030d";
+const APP_VERSIE = "20261030e";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });

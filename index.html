@@ -138,7 +138,7 @@ body.start nav.afd { display: none }
 .site-tegel { --kc: var(--accent); position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 20px; border: 0; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); min-height: 170px; color: var(--ink) }
 .site-tegel::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 6px; background: var(--kc) }
 .site-tegel::after { content: ""; position: absolute; right: -50px; top: -50px; width: 160px; height: 160px; border-radius: 50%; background: var(--kc); opacity: .08 }
-.site-tegel.k1 { --kc: var(--s-bordrest) } .site-tegel.k2 { --kc: var(--s-bereiding) } .site-tegel.k3 { --kc: var(--s-bederf) }
+.site-tegel.keuken { --kc: var(--s-overproductie); background: var(--surface-2); border: 2px dashed var(--line) } .site-tegel.k1 { --kc: var(--s-bordrest) } .site-tegel.k2 { --kc: var(--s-bereiding) } .site-tegel.k3 { --kc: var(--s-bederf) }
 .site-tegel:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(28, 42, 34, .08), 0 14px 30px rgba(28, 42, 34, .12) }
 .site-ic { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--kc); color: #fff; margin-bottom: 6px }
 .site-ic .ic { width: 24px; height: 24px }
@@ -300,6 +300,15 @@ form.f .tegel:has(input:checked) { border-color: var(--sc); background: color-mi
 .open-dagen label:has(select) { white-space: nowrap; gap: 6px }
 .open-dagen select { width: auto; padding: 2px 8px; min-height: 0 }
 /* Menu van de maaltijd, bij het wegen */
+.vergelijk { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line) }
+.vergelijk table { width: 100%; margin-top: 4px; font-size: .86rem }
+.vergelijk th, .vergelijk td { padding: 3px 4px; border: 0 }
+.vergelijk th { color: var(--muted); font-weight: 600; font-size: .78rem }
+.vergelijk tr.tot td { font-weight: 700; border-top: 1px solid var(--line) }
+.menu-lijst em { font-style: normal }
+table.producten input, table.producten select { min-width: 0; width: 100% }
+table.producten td:first-child { min-width: 11rem } table.producten td:nth-child(4) { min-width: 14rem }
+.per { display: flex; gap: 4px } .per input { width: 5.5rem } .per select { width: 4.2rem }
 .menu-blok { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px }
 .menu-kop { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px }
 .menu-lijst { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px }
@@ -384,7 +393,7 @@ td.nowrap { white-space: nowrap }
 
 <script src="vendor/supabase-2.116.0.js"></script>
 <!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
-<script src="config.js?v=20261030d"></script>
-<script src="app.js?v=20261030d"></script>
+<script src="config.js?v=20261030e"></script>
+<script src="app.js?v=20261030e"></script>
 </body>
 </html>
