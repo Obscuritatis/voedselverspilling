@@ -25,7 +25,7 @@ const ICON = {
 };
 const icon = (n, cls = "ic") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n] || ""}</svg>`;
 const kort = (k) => (STROMEN[k] || k).split(" (")[0];
-const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Samengesteld gerecht 2", "Samengesteld gerecht 3", "Gemixt (alles samen)", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
+const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Samengesteld gerecht 2", "Samengesteld gerecht 3", "Gemixt en diëten", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
 const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Tussendoortje", "Hele dag"];
 const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
 const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
@@ -188,13 +188,14 @@ const menuProduct = (component, gerecht) => samenVan(gerecht) || (isSamen(compon
 const normTekst = (p) => { const n = normVan(p); return n == null ? "" : `${Math.round(n)} ${p.eenheid === "ml" ? "ml" : "g"} per persoon`; };
 // Wat de keuken voorzag voor één maaltijd van een afdeling, naast wat er gewogen werd.
 // Het menu geldt (voorlopig) enkel voor standaardmaaltijden: gram per persoon × standaardporties.
-// Dieet/gemixte porties en wegingen van "Gemixt (alles samen)" blijven buiten de vergelijking.
+// Dieet/gemixte porties en wegingen van "Gemixt en diëten" (vroeger "Gemixt (alles samen)") blijven buiten de vergelijking.
+const GEMIXT = ["Gemixt en diëten", "Gemixt (alles samen)"];
 function vergelijking(afdId, datum, maaltijd, ms) {
   const mt = S.maaltijden.find((x) => x.afdelingId === afdId && x.datum === datum && x.maaltijd === maaltijd);
   const menu = menuVan(siteVanAfd(afdId), datum, maaltijd);
   if (!mt || mt.porties == null || !menu.length) return null;
   const dieet = Number(mt.portiesDieet) || 0, standaard = Math.max(0, Number(mt.porties) - dieet);
-  const gew = ms.filter((m) => m.afdelingId === afdId && m.datum === datum && m.maaltijd === maaltijd && m.component !== "Gemixt (alles samen)");
+  const gew = ms.filter((m) => m.afdelingId === afdId && m.datum === datum && m.maaltijd === maaltijd && !GEMIXT.includes(m.component));
   // Onderdelen die in een samengesteld gerecht zitten, vallen weg; hun wegingen tellen bij het samengestelde gerecht.
   const samen = menu.filter((x) => samenVan(x.gerecht)), gedekt = new Set(samen.flatMap((x) => [x.component, ...vervangtVan(samenVan(x.gerecht))]));
   // Er kunnen meerdere samengestelde gerechten op het menu staan (bv. waterzooi en stoemp). Elke weging telt maar bij één ervan:
@@ -250,7 +251,7 @@ function vergelijkHtml(a, datum, maaltijd, ms) {
   if (!v) return `<p class="hint" style="margin-top:8px">Vul "Klaargemaakt" in om te vergelijken met wat de keuken voorzag.</p>`;
   return `<div class="vergelijk"><b>Voorzien en gewogen (standaardmaaltijden)</b><table><thead><tr><th></th><th class="num">Voorzien</th><th class="num">Gewogen</th><th class="num">Terug</th></tr></thead><tbody>${v.rijen.map((x) => `<tr><td>${esc(x.gerecht)}</td><td class="num">${x.voorzien == null ? `<span class="hint">geen norm</span>` : kg(x.voorzien)}</td><td class="num">${kg(x.gewogen)}</td><td class="num">${x.voorzien == null ? "–" : pct(x.gewogen, x.voorzien)}</td></tr>`).join("")}
     <tr class="tot"><td>Totaal</td><td class="num">${v.voorzien == null ? "–" : kg(v.voorzien)}</td><td class="num">${kg(v.gewogen)}</td><td class="num">${pct(v.gewogen, v.voorzien)}</td></tr></tbody></table>
-    ${v.dieet ? `<p class="hint">De ${v.dieet} dieet/gemixte maaltijden en de wegingen van "Gemixt" tellen hier nog niet mee.</p>` : ""}
+    ${v.dieet ? `<p class="hint">De ${v.dieet} dieet/gemixte maaltijden en de wegingen van "Gemixt en diëten" tellen hier nog niet mee.</p>` : ""}
     ${v.ontbreekt.length ? `<p class="hint">Nog geen gram per persoon voor ${esc(v.ontbreekt.join(", "))}: vul dat in bij Productie.</p>` : ""}</div>`;
 }
 const pct = (gew, voorz) => (voorz ? Math.round((gew / voorz) * 100) + "%" : "–");
@@ -1276,7 +1277,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030o";
+const APP_VERSIE = "20261030p";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
