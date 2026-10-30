@@ -269,3 +269,6 @@ create unique index if not exists vv_menus_uniek_idx on public.vv_menus (coalesc
 insert into public.vv_producten (naam, component, eenheid) values
   ('Soep', 'Soep', 'ml'), ('Vlees, vis of vegetarisch', 'Vlees, vis of vegetarisch', 'g'), ('Saus', 'Saus', 'g'), ('Groenten', 'Groenten', 'g'), ('Dessert', 'Dessert', 'g')
 on conflict do nothing;
+
+-- Samengestelde gerechten (30/10/2026).
+alter table public.vv_producten add column if not exists vervangt text[] not null default '{}';
