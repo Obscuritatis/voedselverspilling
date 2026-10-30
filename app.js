@@ -167,18 +167,18 @@ const onderdelenVan = (p) => (Array.isArray(p?.onderdelen) ? p.onderdelen : []).
 const normVan = (p) => { if (!p) return null; const o = onderdelenVan(p); if (o.length) return o.reduce((t, x) => t + (Number(x.gram) || 0), 0) || null; return p.gram == null || p.gram === "" ? null : Number(p.gram); };
 const normTekst = (p) => { const n = normVan(p); return n == null ? "" : `${Math.round(n)} ${p.eenheid === "ml" ? "ml" : "g"} per persoon`; };
 // Wat de keuken voorzag voor één maaltijd van een afdeling, naast wat er gewogen werd.
-// Standaard: gram per persoon × standaardporties; Gemixt: alle gerechten samen × dieet/gemixte porties.
+// Het menu geldt (voorlopig) enkel voor standaardmaaltijden: gram per persoon × standaardporties.
+// Dieet/gemixte porties en wegingen van "Gemixt (alles samen)" blijven buiten de vergelijking.
 function vergelijking(afdId, datum, maaltijd, ms) {
   const mt = S.maaltijden.find((x) => x.afdelingId === afdId && x.datum === datum && x.maaltijd === maaltijd);
   const menu = menuVan(siteVanAfd(afdId), datum, maaltijd);
   if (!mt || mt.porties == null || !menu.length) return null;
   const dieet = Number(mt.portiesDieet) || 0, standaard = Math.max(0, Number(mt.porties) - dieet);
-  const gew = ms.filter((m) => m.afdelingId === afdId && m.datum === datum && m.maaltijd === maaltijd);
+  const gew = ms.filter((m) => m.afdelingId === afdId && m.datum === datum && m.maaltijd === maaltijd && m.component !== "Gemixt (alles samen)");
   const rijen = menu.map((x) => { const p = productVan(x.gerecht), n = normVan(p); return { component: x.component, gerecht: x.gerecht, norm: n, eenheid: p?.eenheid || "g", voorzien: n == null ? null : (n * standaard) / 1000, gewogen: sum(gew.filter((m) => m.component === x.component)) }; });
   const somNorm = rijen.reduce((t, x) => t + (x.norm || 0), 0);
-  if (dieet && somNorm) rijen.push({ component: "Gemixt (alles samen)", gerecht: "dieet/gemixt", norm: somNorm, eenheid: "g", voorzien: (somNorm * dieet) / 1000, gewogen: sum(gew.filter((m) => m.component === "Gemixt (alles samen)")) });
-  const voorzien = somNorm ? (somNorm * Number(mt.porties)) / 1000 : null;
-  return { rijen, voorzien, gewogen: sum(gew), ontbreekt: rijen.filter((x) => x.norm == null).map((x) => x.gerecht) };
+  const voorzien = somNorm ? (somNorm * standaard) / 1000 : null;
+  return { rijen, voorzien, gewogen: sum(gew), dieet, ontbreekt: rijen.filter((x) => x.norm == null).map((x) => x.gerecht) };
 }
 // Bewaart een menu voor één site, of centraal (siteId null). Een site bewaart enkel wat afwijkt van het centrale menu.
 function bewaarMenuRijen(siteId, datum, maaltijd, waarden, okMsg = "Menu bewaard") {
@@ -197,8 +197,9 @@ const productLijst = () => `<datalist id="dlProducten">${[...S.producten].sort((
 function vergelijkHtml(a, datum, maaltijd, ms) {
   const v = vergelijking(a.id, datum, maaltijd, ms);
   if (!v) return `<p class="hint" style="margin-top:8px">Vul "Klaargemaakt" in om te vergelijken met wat de keuken voorzag.</p>`;
-  return `<div class="vergelijk"><b>Voorzien en gewogen</b><table><thead><tr><th></th><th class="num">Voorzien</th><th class="num">Gewogen</th><th class="num">Terug</th></tr></thead><tbody>${v.rijen.map((x) => `<tr><td>${esc(x.gerecht)}</td><td class="num">${x.voorzien == null ? `<span class="hint">geen norm</span>` : kg(x.voorzien)}</td><td class="num">${kg(x.gewogen)}</td><td class="num">${x.voorzien == null ? "–" : pct(x.gewogen, x.voorzien)}</td></tr>`).join("")}
+  return `<div class="vergelijk"><b>Voorzien en gewogen (standaardmaaltijden)</b><table><thead><tr><th></th><th class="num">Voorzien</th><th class="num">Gewogen</th><th class="num">Terug</th></tr></thead><tbody>${v.rijen.map((x) => `<tr><td>${esc(x.gerecht)}</td><td class="num">${x.voorzien == null ? `<span class="hint">geen norm</span>` : kg(x.voorzien)}</td><td class="num">${kg(x.gewogen)}</td><td class="num">${x.voorzien == null ? "–" : pct(x.gewogen, x.voorzien)}</td></tr>`).join("")}
     <tr class="tot"><td>Totaal</td><td class="num">${v.voorzien == null ? "–" : kg(v.voorzien)}</td><td class="num">${kg(v.gewogen)}</td><td class="num">${pct(v.gewogen, v.voorzien)}</td></tr></tbody></table>
+    ${v.dieet ? `<p class="hint">De ${v.dieet} dieet/gemixte maaltijden en de wegingen van "Gemixt" tellen hier nog niet mee.</p>` : ""}
     ${v.ontbreekt.length ? `<p class="hint">Nog geen gram per persoon voor ${esc(v.ontbreekt.join(", "))}: vul dat in bij Productie.</p>` : ""}</div>`;
 }
 const pct = (gew, voorz) => (voorz ? Math.round((gew / voorz) * 100) + "%" : "–");
@@ -561,7 +562,7 @@ function tabMetingen(body, a, ms, msP) {
     const mt = ofAfd(S.maaltijden, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
     if (!mt.length) return "";
     return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Klaargemaakt</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Voorzien</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Terug</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
-    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}${x.portiesDieet ? `<br><span class="hint">waarvan ${x.portiesDieet} dieet/gemixt</span>` : ""}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td>${(() => { const vg = vergelijking(x.afdelingId, x.datum, x.maaltijd, ms), vz = vg?.voorzien; return `<td class="num">${vz == null ? "–" : kg(vz)}</td><td class="num">${kg(k)}</td><td class="num">${vz == null ? "–" : pct(k, vz)}</td>`; })()}<td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
+    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}${x.portiesDieet ? `<br><span class="hint">waarvan ${x.portiesDieet} dieet/gemixt</span>` : ""}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td>${(() => { const vg = vergelijking(x.afdelingId, x.datum, x.maaltijd, ms), vz = vg?.voorzien; return `<td class="num">${vz == null ? "–" : kg(vz)}</td><td class="num">${kg(k)}</td><td class="num">${vz == null ? "–" : pct(vg.gewogen, vz)}</td>`; })()}<td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
     </tbody></table></div><p class="hint" style="margin-top:8px">Verschil = klaargemaakt min aanwezigen. Een plus betekent dat er te veel klaargemaakt werd.</p></section>`;
   })()}
   <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente wegingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
@@ -1032,8 +1033,8 @@ async function exporteerVerslag(afdId) {
   // Maaltijden (porties en aanwezigen)
   const mts = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
   const mb = blad(wb, "Maaltijden", "Maaltijden: klaargemaakt en aanwezig", info, [12, 20, 14, 12, 14, 14, 12, 12, 13, 13, 10, 16], XL.stroom.overproductie[1]);
-  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Standaard"], ["Dieet/gemixt"], ["Klaargemaakt totaal"], ["Aanwezig"], ["Verschil"], ["Voorzien (kg)", , "0.0"], ["Gewogen (kg)", , "0.0"], ["Terug", , "0%"], ["Per aanwezige (g)", , "0"]],
-    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties != null ? x.porties - (x.portiesDieet || 0) : "", x.portiesDieet ?? "", x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", ...(() => { const vz = vergelijking(x.afdelingId, x.datum, x.maaltijd, ms)?.voorzien; return [vz == null ? "" : kgNum(vz), kgNum(k), vz ? k / vz : ""]; })(), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
+  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Standaard"], ["Dieet/gemixt"], ["Klaargemaakt totaal"], ["Aanwezig"], ["Verschil"], ["Voorzien standaard (kg)", , "0.0"], ["Gewogen (kg)", , "0.0"], ["Terug standaard", , "0%"], ["Per aanwezige (g)", , "0"]],
+    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties != null ? x.porties - (x.portiesDieet || 0) : "", x.portiesDieet ?? "", x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", ...(() => { const vg = vergelijking(x.afdelingId, x.datum, x.maaltijd, ms), vz = vg?.voorzien; return [vz == null ? "" : kgNum(vz), kgNum(k), vz ? vg.gewogen / vz : ""]; })(), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
     (r, k) => { const x = mts[k]; if (x.porties != null && x.aanwezig != null && x.porties !== x.aanwezig) kleur(r.getCell(8), x.porties > x.aanwezig ? XL.tegel.amber : XL.tegel.blauw); });
   mb.ws.views = [{ state: "frozen", ySplit: mb.start, showGridLines: false }];
 
@@ -1166,7 +1167,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030e";
+const APP_VERSIE = "20261030f";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
