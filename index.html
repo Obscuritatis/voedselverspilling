@@ -308,6 +308,8 @@ form.f .tegel:has(input:checked) { border-color: var(--sc); background: color-mi
 .menu-lijst em { font-style: normal }
 table.producten input, table.producten select { min-width: 0; width: 100% }
 table.producten td:first-child { min-width: 11rem } table.producten td:nth-child(4) { min-width: 14rem }
+.onderdelen { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 12px }
+.onderdelen label { display: grid; gap: 4px; font-weight: 600 }
 .per { display: flex; gap: 4px } .per input { width: 5.5rem } .per select { width: 4.2rem }
 .menu-blok { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px }
 .menu-kop { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px }
@@ -393,7 +395,7 @@ td.nowrap { white-space: nowrap }
 
 <script src="vendor/supabase-2.116.0.js"></script>
 <!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
-<script src="config.js?v=20261030f"></script>
-<script src="app.js?v=20261030f"></script>
+<script src="config.js?v=20261030g"></script>
+<script src="app.js?v=20261030g"></script>
 </body>
 </html>

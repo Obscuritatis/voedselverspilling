@@ -264,3 +264,8 @@ end $$;
 alter table public.vv_menus alter column site_id drop not null;
 alter table public.vv_menus drop constraint if exists vv_menus_site_id_datum_maaltijd_component_key;
 create unique index if not exists vv_menus_uniek_idx on public.vv_menus (coalesce(site_id, ''), datum, maaltijd, component);
+
+-- Normen per onderdeel (30/10/2026): rij met naam = component; enkel zetmeel per soort.
+insert into public.vv_producten (naam, component, eenheid) values
+  ('Soep', 'Soep', 'ml'), ('Vlees, vis of vegetarisch', 'Vlees, vis of vegetarisch', 'g'), ('Saus', 'Saus', 'g'), ('Groenten', 'Groenten', 'g'), ('Dessert', 'Dessert', 'g')
+on conflict do nothing;
