@@ -595,20 +595,21 @@ function renderOverzicht(main) {
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
       <div class="tablewrap"><table class="afd-tabel">
-        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten nu een standaardmaaltijd krijgen">Huidig standaard</th><th style="text-align:right" title="Bewoners of patiënten met een gemixte maaltijd of een dieet">Gemixt/diëten</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten nu een standaardmaaltijd krijgen">Huidig standaard</th><th style="text-align:right" title="Bewoners of patiënten met een gemixte maaltijd of een dieet">Gemixt/diëten</th><th style="text-align:right" title="Standaard + gemixt/diëten">Huidige bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
             <td><div class="afd-cel"><i class="ndot d-${focusInfo(a)[0]}"></i><div><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></div></div></td>
             <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
             <td class="num">${huidigVeld(a)}</td>
             <td class="num">${dieetVeld(a)}</td>
+            <td class="num"><b>${totaalNu(a) ?? `<span class="hint">–</span>`}</b></td>
             <td class="num">${kg(k)}</td>
             <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
             <td class="num">${(() => { const pa = perAanwezige(a.id, ofAfd(ms, a.id)); if (pa != null) return gram(pa); const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : `<span class="hint" title="per bewoner per meetdag">${gram(g)}/bewoner</span>`; })()}</td>
             <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
             <td class="nowrap">${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
             <td class="focus">${focusFor(a)}</td>
-          </tr>`; }).join("") || `<tr><td colspan="10" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+          </tr>`; }).join("") || `<tr><td colspan="11" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
       </table></div>
     </section>
     <div class="two">
@@ -633,7 +634,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidig standaard ${huidigVeld(a)}</label><label class="hint">Gemixt/diëten ${dieetVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${dagBezettingTekst(a) ? `<p class="hint">Bezetting per dag: ${esc(dagBezettingTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidig standaard ${huidigVeld(a)}</label><label class="hint">Gemixt/diëten ${dieetVeld(a)}</label>${totaalNu(a) != null ? `<span class="hint">Huidige bezetting: <b>${totaalNu(a)}</b></span>` : ""}${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${dagBezettingTekst(a) ? `<p class="hint">Bezetting per dag: ${esc(dagBezettingTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
@@ -899,6 +900,7 @@ function beheerHtml() {
         <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
         <label class="hint" style="display:flex;gap:6px;align-items:center">Huidig standaard${huidigVeld(a, "")}</label>
         <label class="hint" style="display:flex;gap:6px;align-items:center">Gemixt/diëten${dieetVeld(a, "")}</label>
+        ${totaalNu(a) != null ? `<span class="hint" style="display:flex;align-items:center">Huidige bezetting: <b>&nbsp;${totaalNu(a)}</b></span>` : ""}
         <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
       </div>
       <div class="open-dagen hint" data-open="${esc(a.id)}"><span>Open op</span>${DAGEN.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${openDagen(a).includes(i + 1) ? " checked" : ""}${dis()}><span>${d.slice(0, 2)}</span></label>`).join("")}<label>en de laatste<select data-laatste="${esc(a.id)}"${dis()}><option value="">–</option>${DAGEN.map((d, i) => `<option value="${i + 1}"${laatsteDag(a) === i + 1 ? " selected" : ""}>${d}</option>`).join("")}</select>van de maand</label><span>${heeftDagen(a) ? "" : "(niets aangeduid = elke dag)"}</span></div>
@@ -1292,7 +1294,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030q";
+const APP_VERSIE = "20261030r";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
