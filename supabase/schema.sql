@@ -276,3 +276,7 @@ alter table public.vv_producten add column if not exists vervangt text[] not nul
 -- Richtlijnen (30/10/2026).
 alter table public.vv_producten add column if not exists toelichting text not null default '';
 alter table public.vv_producten add column if not exists richtlijn boolean not null default false;
+-- Jeugdpsychiatrie (Pathways) (30/10/2026).
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit) values
+  ('psychiatrisch-ziekenhuis-jeugdpsychiatrie-pathways', 'psychiatrisch-ziekenhuis', 'Jeugdpsychiatrie (Pathways)', 'patientenafdeling', 11, 7)
+on conflict (id) do nothing;
