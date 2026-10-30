@@ -49,7 +49,7 @@ create table if not exists public.vv_metingen (
   maaltijd text not null default '',
   stroom text not null,
   component text not null default '',
-  kg numeric(8,2) not null check (kg >= 0),
+  kg numeric(9,3) not null check (kg >= 0),
   opmerking text not null default '',
   aangemaakt timestamptz not null default now(),
   aangemaakt_door uuid default auth.uid()
@@ -289,3 +289,6 @@ insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit,
   ('psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2', 'psychiatrisch-ziekenhuis', 'AP2 (groep B, C1 en C2)', 'patientenafdeling', 14, 34, array[6, 7]::smallint[]),
   ('psychiatrisch-ziekenhuis-jeugdpsychiatrie-crossroads-lighthouse', 'psychiatrisch-ziekenhuis', 'Jeugdpsychiatrie (Crossroads en Lighthouse)', 'patientenafdeling', 15, 15, array[6, 7]::smallint[])
 on conflict (id) do nothing;
+
+-- Wegingen tot 3 cijfers na de komma (30/10/2026).
+alter table public.vv_metingen alter column kg type numeric(9,3);
