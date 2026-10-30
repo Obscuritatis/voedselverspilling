@@ -24,7 +24,7 @@ from (values
 where a.id = v.id;
 
 update public.vv_afdelingen
-set omschrijving = 'Restaurant voor medewerkers. Vaste aantallen van afdelingen: Verslavingszorg groep D 15, AP2 groep B, C1 en C2 34, Jeugdpsychiatrie Crossroads en Lighthouse 15 (samen 64).'
+set omschrijving = 'Restaurant voor medewerkers. Vaste aantallen van afdelingen: Verslavingszorg groep D 15, AP2 groep B, C1 en C2 34, Jeugdpsychiatrie Crossroads en Lighthouse 15 (samen 64). Dit aantal is enkel dat van deze afdelingen; daarna komen nog de inschrijvingen van het personeel bij.'
 where id = 'psychiatrisch-ziekenhuis-personeelsrestaurant';
 
 select naam, capaciteit as max, huidige_bezetting as huidig, omschrijving
