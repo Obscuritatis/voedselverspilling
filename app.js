@@ -152,7 +152,7 @@ const heeftDagen = (a) => openDagen(a).length > 0 || laatsteDag(a) != null;
 const openOp = (a, datum) => !heeftDagen(a) || openDagen(a).includes(isoDag(datum)) || (laatsteDag(a) === isoDag(datum) && isLaatste(datum));
 const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); if (laatsteDag(a)) d.push(`de laatste ${DAGEN[laatsteDag(a) - 1]} van de maand`); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
-const MENU_COMP = ["Soep", "Samengesteld gerecht", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert"];
+const MENU_COMP = ["Soep", "Samengesteld gerecht", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert", "Brood en beleg"];
 const kortComp = (c) => c.split(/[,(]/)[0].trim();
 // Het centrale menu van de hoofdkeuken (zonder site) geldt overal; een gerecht dat voor een site apart ingevuld is, gaat voor.
 const menuVan = (siteId, datum, maaltijd) => {
@@ -162,7 +162,12 @@ const menuVan = (siteId, datum, maaltijd) => {
 const siteVanAfd = (afdId) => S.afdelingen.find((a) => a.id === afdId)?.siteId;
 const gerechtVan = (m) => menuVan(m.siteId || siteVanAfd(m.afdelingId), m.datum, m.maaltijd).find((x) => x.component === m.component)?.gerecht || "";
 // Productienormen van de hoofdkeuken: gram (of ml, gerekend als gram) per bewoner. Een samengestelde maaltijd telt haar onderdelen op.
-const productVan = (naam) => { const n = String(naam || "").trim().toLowerCase(); return n ? S.producten.find((x) => String(x.naam).trim().toLowerCase() === n) || null : null; };
+// Exacte naam, of anders de langste zetmeelsoort of samengesteld gerecht die in de naam zit ("Preistoemp" → Stoemp).
+const productVan = (naam) => {
+  const n = String(naam || "").trim().toLowerCase(), lc = (x) => String(x.naam).trim().toLowerCase();
+  if (!n) return null;
+  return S.producten.find((x) => lc(x) === n) || S.producten.filter((x) => (x.component === ZETMEEL || x.component === SAMEN) && lc(x).length > 2 && n.includes(lc(x))).sort((x, y) => lc(y).length - lc(x).length)[0] || null;
+};
 const onderdelenVan = (p) => (Array.isArray(p?.onderdelen) ? p.onderdelen : []).filter((o) => o && o.naam);
 const normVan = (p) => { if (!p) return null; const o = onderdelenVan(p); if (o.length) return o.reduce((t, x) => t + (Number(x.gram) || 0), 0) || null; return p.gram == null || p.gram === "" ? null : Number(p.gram); };
 // Eén norm per onderdeel (groenten, vlees/vis/vegetarisch, saus, soep, dessert); enkel zetmeel heeft soorten (puree, frietjes …), gekoppeld op naam.
@@ -1201,7 +1206,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030h";
+const APP_VERSIE = "20261030i";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
