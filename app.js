@@ -443,6 +443,9 @@ function tabMetingen(body, a, ms, msP) {
   const wb = body.querySelector("[data-wis-afd]");
   if (wb) wb.onclick = () => { ui.wisAfd = wb.dataset.wisAfd; ui.view = "beheer"; render(); window.scrollTo({ top: document.body.scrollHeight }); setTimeout(() => $("#wBev")?.focus(), 50); };
   const huidig = () => S.maaltijden.find((x) => x.afdelingId === a.id && x.datum === ($("#mDatum").value || today()) && x.maaltijd === $("#mMaaltijd").value);
+  // Bewaarde aantallen staan vast; met "Wijzigen" zet je ze terug open om een fout te verbeteren.
+  let aantVast = false;
+  const AANT = ["#mPorties", "#mDieet", "#mAanwezig"];
   const vulAantallen = () => {
     const h = huidig();
     // porties is het totaal; standaard = totaal min dieet/gemixt.
@@ -450,7 +453,8 @@ function tabMetingen(body, a, ms, msP) {
     // Zonder bewaarde aantallen nemen we de huidige bezetting van de afdeling over als aanwezigen.
     const vanBezetting = h?.aanwezig == null && a.huidigeBezetting != null;
     $("#mAanwezig").value = h?.aanwezig ?? a.huidigeBezetting ?? "";
-    $("#mAantInfo").textContent = h ? "Al ingevuld voor deze maaltijd; pas aan indien nodig." : vanBezetting ? "Aanwezigen overgenomen van de huidige bezetting; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
+    aantVast = !!h;
+    $("#mAantInfo").textContent = h ? "Bewaard voor deze maaltijd. Klik op Wijzigen als er een fout in staat." : vanBezetting ? "Aanwezigen overgenomen van de huidige bezetting; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
   };
   const getalOfNull = (v) => (v === "" || v == null ? null : Math.max(0, Math.round(Number(v)) || 0));
   // Bewaart porties en aanwezigen als ze ingevuld en gewijzigd zijn. Geeft false bij een fout.
@@ -499,12 +503,19 @@ function tabMetingen(body, a, ms, msP) {
     const datum = $("#mDatum").value || today(), dicht = !openOp(a, datum), m = $("#mDicht");
     m.hidden = !dicht;
     m.textContent = dicht ? `${a.naam} is enkel open op ${openTekst(a)}. Op ${DAGEN[isoDag(datum) - 1]} ${fmtDate(datum)} kan je niets invullen; kies een andere datum.` : "";
-    $("#fMeting").querySelectorAll("input, select, button").forEach((el) => { if (el.id !== "mDatum" && !el.closest("#mMenu")) el.disabled = dicht || !canWrite; });
+    $("#fMeting").querySelectorAll("input, select, button").forEach((el) => { if (el.id !== "mDatum" && !el.closest("#mMenu")) el.disabled = dicht || !canWrite || (aantVast && AANT.includes("#" + el.id)); });
+    $("#mAantBewaar").textContent = aantVast ? "Wijzigen" : "Aantallen bewaren";
   };
   vulAantallen(); tekenMenu(); zetOpen();
   $("#mDatum").onchange = () => { ui.mDatum = $("#mDatum").value; vulAantallen(); tekenMenu(); zetOpen(); };
-  $("#mMaaltijd").onchange = () => { ui.mMaaltijd = $("#mMaaltijd").value; vulAantallen(); tekenMenu(); };
-  $("#mAantBewaar").onclick = () => (openOp(a, $("#mDatum").value || today()) ? bewaarAantallen(true) : toast(`${a.naam} is enkel open op ${openTekst(a)}.`));
+  $("#mMaaltijd").onchange = () => { ui.mMaaltijd = $("#mMaaltijd").value; vulAantallen(); tekenMenu(); zetOpen(); };
+  $("#mAantBewaar").onclick = () => {
+    if (!openOp(a, $("#mDatum").value || today())) { toast(`${a.naam} is enkel open op ${openTekst(a)}.`); return; }
+    if (!aantVast) { bewaarAantallen(true); return; }
+    aantVast = false; zetOpen();
+    $("#mAantInfo").textContent = "Pas de aantallen aan en klik op Aantallen bewaren.";
+    $("#mPorties").focus();
+  };
   $("#fMeting").onsubmit = async (e) => {
     e.preventDefault();
     if (!openOp(a, $("#mDatum").value || today())) { toast(`${a.naam} is enkel open op ${openTekst(a)}.`); return; }
@@ -1029,7 +1040,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030c";
+const APP_VERSIE = "20261030d";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
