@@ -192,9 +192,16 @@ function vergelijking(afdId, datum, maaltijd, ms) {
   const gew = ms.filter((m) => m.afdelingId === afdId && m.datum === datum && m.maaltijd === maaltijd && m.component !== "Gemixt (alles samen)");
   // Onderdelen die in een samengesteld gerecht zitten, vallen weg; hun wegingen tellen bij het samengestelde gerecht.
   const samen = menu.filter((x) => samenVan(x.gerecht)), gedekt = new Set(samen.flatMap((x) => [x.component, ...vervangtVan(samenVan(x.gerecht))]));
-  const rijen = menu.filter((x) => samenVan(x.gerecht) || !gedekt.has(x.component)).map((x, i) => {
+  // Er kunnen meerdere samengestelde gerechten op het menu staan (bv. waterzooi en stoemp). Elke weging telt maar bij één ervan:
+  // eerst het onderdeel waarin het gerecht staat, daarna wat het bevat, in menuvolgorde. "Samengesteld gerecht" gaat naar het gerecht in dat veld.
+  const eersteSamen = samen.find((x) => x.component === SAMEN) || samen[0], geclaimd = new Set();
+  const claim = (cs) => new Set(cs.filter((c) => !geclaimd.has(c) && geclaimd.add(c)));
+  const volgorde = [...samen].sort((x, y) => (y === eersteSamen) - (x === eersteSamen));
+  const compsVan = new Map(volgorde.map((x) => [x, claim([x.component, ...(x === eersteSamen ? [SAMEN] : [])])]));
+  volgorde.forEach((x) => vervangtVan(samenVan(x.gerecht)).forEach((c) => { if (!geclaimd.has(c)) { geclaimd.add(c); compsVan.get(x).add(c); } }));
+  const rijen = menu.filter((x) => samenVan(x.gerecht) || !gedekt.has(x.component)).map((x) => {
     const sp = samenVan(x.gerecht), p = menuProduct(x.component, x.gerecht), n = normVan(p);
-    const comps = sp ? new Set([x.component, ...vervangtVan(sp), ...(x === samen[0] ? [SAMEN] : [])]) : new Set([x.component]);
+    const comps = sp ? compsVan.get(x) : new Set([x.component]);
     return { component: x.component, gerecht: x.gerecht, norm: n, eenheid: p?.eenheid || "g", voorzien: n == null ? null : (n * standaard) / 1000, gewogen: sum(gew.filter((m) => comps.has(m.component))), samengesteld: !!sp };
   });
   const somNorm = rijen.reduce((t, x) => t + (x.norm || 0), 0);
@@ -1206,7 +1213,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030i";
+const APP_VERSIE = "20261030j";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
