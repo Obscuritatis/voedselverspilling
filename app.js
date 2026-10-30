@@ -150,6 +150,9 @@ const laatsteDag = (a) => { const d = Number(a.openLaatste); return d >= 1 && d 
 const isLaatste = (datum) => { const d = new Date(datum + "T12:00:00"); d.setDate(d.getDate() + 7); return d.toISOString().slice(5, 7) !== datum.slice(5, 7); };
 const heeftDagen = (a) => openDagen(a).length > 0 || laatsteDag(a) != null;
 const openOp = (a, datum) => !heeftDagen(a) || openDagen(a).includes(isoDag(datum)) || (laatsteDag(a) === isoDag(datum) && isLaatste(datum));
+// Vaste bezetting per weekdag (bv. buurtrestaurant: maandag 8, donderdag 14) gaat voor op de huidige bezetting.
+const dagBezetting = (a, datum) => { const v = a.bezettingDag?.[isoDag(datum)]; return v == null ? null : Number(v); };
+const dagBezettingTekst = (a) => Object.entries(a.bezettingDag || {}).sort(([x], [y]) => x - y).map(([d, n]) => `${DAGEN[d - 1]} ${n}`).join(", ");
 const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); if (laatsteDag(a)) d.push(`de laatste ${DAGEN[laatsteDag(a) - 1]} van de maand`); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
 const MENU_COMP = ["Soep", "Samengesteld gerecht", "Samengesteld gerecht 2", "Samengesteld gerecht 3", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert", "Brood en beleg"];
@@ -384,7 +387,7 @@ function renderStart(main, sites) {
 
 // ---------- productie (hoofdkeuken, voor alle sites) ----------
 // Wat er per site geproduceerd moet worden voor één maaltijd: hoeveelheid per persoon × gekende aantallen.
-// Aantallen per afdeling: huidige bezetting, anders max. bezetting; afdelingen die die dag dicht zijn, tellen niet mee.
+// Aantallen per afdeling: bezetting van die weekdag, anders huidige bezetting, anders max. bezetting; afdelingen die die dag dicht zijn, tellen niet mee.
 function productieItems(menu) {
   const samen = menu.filter((x) => samenVan(x.gerecht)), gedekt = new Set(samen.flatMap((x) => [x.component, ...vervangtVan(samenVan(x.gerecht))]));
   return menu.filter((x) => samenVan(x.gerecht) || !gedekt.has(x.component))
@@ -393,7 +396,7 @@ function productieItems(menu) {
 }
 function personenVoor(siteId, datum) {
   const afd = S.afdelingen.filter((a) => a.siteId === siteId && openOp(a, datum));
-  const n = (a) => (a.huidigeBezetting != null ? Number(a.huidigeBezetting) : a.capaciteit != null ? Number(a.capaciteit) : null);
+  const n = (a) => dagBezetting(a, datum) ?? (a.huidigeBezetting != null ? Number(a.huidigeBezetting) : a.capaciteit != null ? Number(a.capaciteit) : null);
   return { personen: afd.reduce((t, a) => t + (n(a) || 0), 0), onbekend: afd.filter((a) => n(a) == null).map((a) => a.naam) };
 }
 const hoeveel = (gram, eenheid) => (eenheid === "ml" ? (Math.round(gram / 100) / 10).toLocaleString("nl-BE", { minimumFractionDigits: 1 }) + " l" : kg(gram / 1000));
@@ -615,7 +618,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${dagBezettingTekst(a) ? `<p class="hint">Bezetting per dag: ${esc(dagBezettingTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
@@ -680,8 +683,9 @@ function tabMetingen(body, a, ms, msP) {
     // porties is het totaal; standaard = totaal min dieet/gemixt.
     $("#mPorties").value = h?.porties != null ? h.porties - (h.portiesDieet || 0) : ""; $("#mDieet").value = h?.portiesDieet ?? "";
     // Zonder bewaarde aantallen nemen we de huidige bezetting van de afdeling over als aanwezigen.
-    const vanBezetting = h?.aanwezig == null && a.huidigeBezetting != null;
-    $("#mAanwezig").value = h?.aanwezig ?? a.huidigeBezetting ?? "";
+    const bezet = dagBezetting(a, $("#mDatum").value || today()) ?? a.huidigeBezetting;
+    const vanBezetting = h?.aanwezig == null && bezet != null;
+    $("#mAanwezig").value = h?.aanwezig ?? bezet ?? "";
     aantVast = !!h;
     $("#mAantInfo").textContent = h ? "Bewaard voor deze maaltijd. Klik op Wijzigen als er een fout in staat." : vanBezetting ? "Aanwezigen overgenomen van de huidige bezetting; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
   };
@@ -1272,7 +1276,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030m";
+const APP_VERSIE = "20261030n";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
