@@ -27,5 +27,18 @@ select null, v.datum::date, v.maaltijd, v.component, v.gerecht from (values
 {("," + chr(10)).join(rows)}
 ) as v(datum, maaltijd, component, gerecht)
 on conflict (coalesce(site_id, ''), datum, maaltijd, component) do update set gerecht = excluded.gerecht;
+-- Gerechten waarin een samengesteld gerecht uit de lijst bij Productie zit (zoals Johan ze daar ingaf), naar een vrije plaats
+-- "Samengesteld gerecht" (… 2, … 3) verplaatsen. Zo worden ook nieuwe samengestelde gerechten herkend.
+with bestaand as (
+  select datum, maaltijd, count(*) as n from public.vv_menus
+  where site_id is null and datum between {q(dagen[0])} and {q(dagen[-1])} and component like 'Samengesteld gerecht%' group by datum, maaltijd
+), kand as (
+  select m.id, row_number() over (partition by m.datum, m.maaltijd order by m.component) + coalesce(b.n, 0) as plaats
+  from public.vv_menus m left join bestaand b on b.datum = m.datum and b.maaltijd = m.maaltijd
+  where m.site_id is null and m.datum between {q(dagen[0])} and {q(dagen[-1])} and m.component not like 'Samengesteld gerecht%'
+    and exists (select 1 from public.vv_producten p where p.component = 'Samengesteld gerecht' and length(p.naam) > 2 and position(lower(p.naam) in lower(m.gerecht)) > 0)
+)
+update public.vv_menus m set component = case k.plaats when 1 then 'Samengesteld gerecht' else 'Samengesteld gerecht ' || k.plaats end
+from kand k where m.id = k.id and k.plaats <= 3;
 select datum, maaltijd, component, gerecht from public.vv_menus where site_id is null and datum between {q(dagen[0])} and {q(dagen[-1])} order by datum, maaltijd, component;
 """)
