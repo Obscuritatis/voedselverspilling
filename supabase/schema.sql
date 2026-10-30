@@ -281,3 +281,10 @@ alter table public.vv_producten add column if not exists richtlijn boolean not n
 insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit) values
   ('psychiatrisch-ziekenhuis-jeugdpsychiatrie-pathways', 'psychiatrisch-ziekenhuis', 'Jeugdpsychiatrie (Pathways)', 'patientenafdeling', 11, 7)
 on conflict (id) do nothing;
+
+-- Weekendgroepen psychiatrisch ziekenhuis (30/10/2026): eten enkel za/zo op de afdeling, op weekdagen in het personeelsrestaurant.
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, capaciteit, open_dagen) values
+  ('psychiatrisch-ziekenhuis-verslavingszorg-groep-d', 'psychiatrisch-ziekenhuis', 'Verslavingszorg (groep D)', 'patientenafdeling', 13, 15, array[6, 7]::smallint[]),
+  ('psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2', 'psychiatrisch-ziekenhuis', 'AP2 (groep B, C1 en C2)', 'patientenafdeling', 14, 34, array[6, 7]::smallint[]),
+  ('psychiatrisch-ziekenhuis-jeugdpsychiatrie-crossroads-lighthouse', 'psychiatrisch-ziekenhuis', 'Jeugdpsychiatrie (Crossroads en Lighthouse)', 'patientenafdeling', 15, 15, array[6, 7]::smallint[])
+on conflict (id) do nothing;
