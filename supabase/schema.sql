@@ -272,3 +272,7 @@ on conflict do nothing;
 
 -- Samengestelde gerechten (30/10/2026).
 alter table public.vv_producten add column if not exists vervangt text[] not null default '{}';
+
+-- Richtlijnen (30/10/2026).
+alter table public.vv_producten add column if not exists toelichting text not null default '';
+alter table public.vv_producten add column if not exists richtlijn boolean not null default false;

@@ -383,6 +383,36 @@ function renderStart(main, sites) {
 }
 
 // ---------- productie (hoofdkeuken, voor alle sites) ----------
+// Wat er per site geproduceerd moet worden voor één maaltijd: hoeveelheid per persoon × gekende aantallen.
+// Aantallen per afdeling: huidige bezetting, anders max. bezetting; afdelingen die die dag dicht zijn, tellen niet mee.
+function productieItems(menu) {
+  const samen = menu.filter((x) => samenVan(x.gerecht)), gedekt = new Set(samen.flatMap((x) => [x.component, ...vervangtVan(samenVan(x.gerecht))]));
+  return menu.filter((x) => samenVan(x.gerecht) || !gedekt.has(x.component))
+    .sort((x, y) => MENU_COMP.indexOf(x.component) - MENU_COMP.indexOf(y.component))
+    .map((x) => { const p = menuProduct(x.component, x.gerecht); return { gerecht: x.gerecht, norm: normVan(p), eenheid: p?.eenheid || "g" }; });
+}
+function personenVoor(siteId, datum) {
+  const afd = S.afdelingen.filter((a) => a.siteId === siteId && openOp(a, datum));
+  const n = (a) => (a.huidigeBezetting != null ? Number(a.huidigeBezetting) : a.capaciteit != null ? Number(a.capaciteit) : null);
+  return { personen: afd.reduce((t, a) => t + (n(a) || 0), 0), onbekend: afd.filter((a) => n(a) == null).map((a) => a.naam) };
+}
+const hoeveel = (gram, eenheid) => (eenheid === "ml" ? (Math.round(gram / 100) / 10).toLocaleString("nl-BE", { minimumFractionDigits: 1 }) + " l" : kg(gram / 1000));
+function teProducerenHtml(sites, datum, maaltijd) {
+  const perSite = sites.map((st) => ({ st, ...personenVoor(st.id, datum), items: productieItems(menuVan(st.id, datum, maaltijd)) }));
+  const rijen = [];
+  perSite.forEach(({ items }) => items.forEach((it) => { if (!rijen.some((r) => r.gerecht === it.gerecht)) rijen.push(it); }));
+  if (!rijen.length) return `<section class="panel" style="margin-top:24px"><h3>Te produceren</h3><p class="hint">Nog geen menu voor deze maaltijd.</p></section>`;
+  const cel = (ps, gerecht) => { const it = ps.items.find((x) => x.gerecht === gerecht); return !it ? "–" : it.norm == null ? `<span class="hint">geen norm</span>` : hoeveel(it.norm * ps.personen, it.eenheid); };
+  const totaal = (gerecht) => { const it = rijen.find((x) => x.gerecht === gerecht); if (it.norm == null) return "–"; return hoeveel(perSite.reduce((t, ps) => { const i = ps.items.find((x) => x.gerecht === gerecht); return t + (i?.norm ? i.norm * ps.personen : 0); }, 0), it.eenheid); };
+  const onbekend = perSite.filter((ps) => ps.onbekend.length);
+  return `<section class="panel" style="margin-top:24px">
+    <div class="form-kop"><span class="kop-ic">${icon("mensen")}</span><div><h3>Te produceren: ${esc(maaltijd.toLowerCase())} ${esc(fmtDate(datum))}</h3><p class="hint">Hoeveelheid per persoon × gekende aantallen per site (huidige bezetting, anders max. bezetting). Iedereen telt mee met de standaardhoeveelheid; diëten volgen later.</p></div></div>
+    <div class="tablewrap"><table class="productie"><thead><tr><th>Gerecht</th><th class="num">Per persoon</th>${perSite.map((ps) => `<th class="num">${esc(ps.st.naam)}<br><span class="hint">${ps.personen} pers.</span></th>`).join("")}<th class="num">Totaal<br><span class="hint">${perSite.reduce((t, ps) => t + ps.personen, 0)} pers.</span></th></tr></thead><tbody>
+    ${rijen.map((it) => `<tr><td>${esc(it.gerecht)}</td><td class="num">${it.norm == null ? "–" : `${Math.round(it.norm)} ${it.eenheid}`}</td>${perSite.map((ps) => `<td class="num">${cel(ps, it.gerecht)}</td>`).join("")}<td class="num"><b>${totaal(it.gerecht)}</b></td></tr>`).join("")}
+    </tbody></table></div>
+    ${onbekend.length ? `<p class="hint" style="margin-top:8px">Zonder gekend aantal (telt niet mee): ${onbekend.map((ps) => `${esc(ps.st.naam)}: ${esc(ps.onbekend.join(", "))}`).join("; ")}. Vul de bezetting in bij Beheer.</p>` : ""}
+  </section>`;
+}
 function renderProductie(main, sites) {
   const datum = ui.pDatum || today(), maaltijd = ui.pMaaltijd || "Middagmaal", scope = sites.some((x) => x.id === ui.pSite) ? ui.pSite : "";
   const menu = menuVan(scope || null, datum, maaltijd), van = (c) => menu.find((x) => x.component === c)?.gerecht || "";
@@ -404,15 +434,16 @@ function renderProductie(main, sites) {
         <div class="full" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="submit" class="primary"${dis()}>Menu bewaren</button><span class="hint">${afwijk.length ? "Afwijkend menu op deze dag voor: " + esc(afwijk.join(", ")) + "." : scope ? "Wat gelijk is aan het centrale menu, wordt niet apart bewaard." : ""}</span></div>
       </form>${productLijst()}
     </section>
+    ${teProducerenHtml(sites, datum, maaltijd)}
     <section class="panel" style="margin-top:24px">
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Gram per persoon per onderdeel</h3><p class="hint">Eén hoeveelheid per onderdeel, welk gerecht het ook is. Wordt bewaard zodra je het veld verlaat.</p></div></div>
-      <div class="onderdelen">${MENU_COMP.filter((c) => c !== ZETMEEL && !isSamen(c)).map((c) => { const p = normProduct(c); return `<label><span>${esc(kortComp(c) === "Vlees" ? "Vlees, vis of vegetarisch" : kortComp(c))}</span><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-ogram="${esc(c)}" value="${esc(p?.gram ?? "")}" aria-label="Per persoon ${esc(c)}"${dis()}><select data-oeenh="${esc(c)}" aria-label="Eenheid ${esc(c)}"${dis()}>${opts(["g", "ml"], p?.eenheid || (c === "Soep" ? "ml" : "g"))}</select></span></label>`; }).join("")}</div>
+      <div class="onderdelen">${MENU_COMP.filter((c) => c !== ZETMEEL && !isSamen(c)).map((c) => { const p = normProduct(c); return `<label><span>${esc(kortComp(c) === "Vlees" ? "Vlees, vis of vegetarisch" : kortComp(c))}</span><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-ogram="${esc(c)}" value="${esc(p?.gram ?? "")}" aria-label="Per persoon ${esc(c)}"${dis()}><select data-oeenh="${esc(c)}" aria-label="Eenheid ${esc(c)}"${dis()}>${opts(["g", "ml"], p?.eenheid || (c === "Soep" ? "ml" : "g"))}</select></span>${p?.toelichting ? `<small class="toel">${esc(p.toelichting)}</small>` : ""}</label>`; }).join("")}</div>
     </section>
     <section class="panel" style="margin-top:24px">
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Zetmeel per soort</h3><p class="hint">Bij zetmeel verschilt de hoeveelheid per soort. In het menu kies je de soort uit deze lijst.</p></div></div>
       ${prods.length ? `<div class="tablewrap"><table class="producten"><thead><tr><th>Soort</th><th>Per persoon</th><th></th></tr></thead><tbody>
       ${prods.map((p) => { const sam = onderdelenVan(p).length; return `<tr>
-        <td><input data-pnaam="${esc(p.id)}" value="${esc(p.naam)}" maxlength="120" aria-label="Naam"${dis()}></td>
+        <td><input data-pnaam="${esc(p.id)}" value="${esc(p.naam)}" maxlength="120" aria-label="Naam"${dis()}>${p.toelichting ? `<small class="toel">${esc(p.toelichting)}</small>` : ""}</td>
         <td><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-pgram="${esc(p.id)}" aria-label="Per persoon ${esc(p.naam)}" value="${sam ? esc(Math.round(normVan(p) || 0)) : esc(p.gram ?? "")}"${sam ? " disabled title=\"Opgeteld uit de samenstelling\"" : dis()}><select data-peenh="${esc(p.id)}" aria-label="Eenheid ${esc(p.naam)}"${dis()}>${opts(["g", "ml"], p.eenheid || "g")}</select></span></td>
         <td>${canWrite ? `<button class="ghost" data-del="producten/${esc(p.id)}" aria-label="Verwijder ${esc(p.naam)}">✕</button>` : ""}</td></tr>`; }).join("")}
       </tbody></table></div>` : `<div class="empty">Nog geen zetmeelsoorten. Voeg er hieronder een toe.</div>`}
@@ -426,7 +457,7 @@ function renderProductie(main, sites) {
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Samengestelde gerechten</h3><p class="hint">Lasagne, stoofvlees, stoemp … Geef één hoeveelheid per persoon en duid aan wat erin zit. Staat het gerecht op het menu, dan tellen die onderdelen niet meer apart.</p></div></div>
       ${samens.length ? `<div class="tablewrap"><table class="producten"><thead><tr><th>Gerecht</th><th>Per persoon</th><th>Bevat</th><th></th></tr></thead><tbody>
       ${samens.map((p) => `<tr>
-        <td><input data-pnaam="${esc(p.id)}" value="${esc(p.naam)}" maxlength="120" aria-label="Naam"${dis()}></td>
+        <td><input data-pnaam="${esc(p.id)}" value="${esc(p.naam)}" maxlength="120" aria-label="Naam"${dis()}>${p.toelichting ? `<small class="toel">${esc(p.toelichting)}</small>` : ""}</td>
         <td><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-pgram="${esc(p.id)}" aria-label="Per persoon ${esc(p.naam)}" value="${esc(p.gram ?? "")}"${dis()}><select data-peenh="${esc(p.id)}" aria-label="Eenheid ${esc(p.naam)}"${dis()}>${opts(["g", "ml"], p.eenheid || "g")}</select></span></td>
         <td><span class="bevat" data-pverv="${esc(p.id)}">${VERVANGBAAR.map((c) => `<label><input type="checkbox" value="${esc(c)}"${vervangtVan(p).includes(c) ? " checked" : ""}${dis()}><span>${esc(kortComp(c))}</span></label>`).join("")}</span></td>
         <td>${canWrite ? `<button class="ghost" data-del="producten/${esc(p.id)}" aria-label="Verwijder ${esc(p.naam)}">✕</button>` : ""}</td></tr>`).join("")}
@@ -1241,7 +1272,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030l";
+const APP_VERSIE = "20261030m";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
