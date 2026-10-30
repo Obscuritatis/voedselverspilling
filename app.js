@@ -145,8 +145,12 @@ const ofAfd = (list, id) => list.filter((x) => x.afdelingId === id);
 const DAGEN = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"];
 const isoDag = (datum) => ((new Date(datum + "T12:00:00").getDay() + 6) % 7) + 1;
 const openDagen = (a) => (a.openDagen || []).map(Number).filter((d) => d >= 1 && d <= 7).sort();
-const openOp = (a, datum) => !openDagen(a).length || openDagen(a).includes(isoDag(datum));
-const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
+// open_laatste: (ook) open op de laatste die weekdag van de maand, bv. 5 = laatste vrijdag.
+const laatsteDag = (a) => { const d = Number(a.openLaatste); return d >= 1 && d <= 7 ? d : null; };
+const isLaatste = (datum) => { const d = new Date(datum + "T12:00:00"); d.setDate(d.getDate() + 7); return d.toISOString().slice(5, 7) !== datum.slice(5, 7); };
+const heeftDagen = (a) => openDagen(a).length > 0 || laatsteDag(a) != null;
+const openOp = (a, datum) => !heeftDagen(a) || openDagen(a).includes(isoDag(datum)) || (laatsteDag(a) === isoDag(datum) && isLaatste(datum));
+const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); if (laatsteDag(a)) d.push(`de laatste ${DAGEN[laatsteDag(a) - 1]} van de maand`); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
 const MENU_COMP = ["Soep", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert"];
 const kortComp = (c) => c.split(/[,(]/)[0].trim();
@@ -382,7 +386,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${openDagen(a).length ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
@@ -494,7 +498,7 @@ function tabMetingen(body, a, ms, msP) {
   const zetOpen = () => {
     const datum = $("#mDatum").value || today(), dicht = !openOp(a, datum), m = $("#mDicht");
     m.hidden = !dicht;
-    m.textContent = dicht ? `${a.naam} is enkel open op ${openTekst(a)}. Op ${DAGEN[isoDag(datum) - 1]} kan je niets invullen; kies een andere datum.` : "";
+    m.textContent = dicht ? `${a.naam} is enkel open op ${openTekst(a)}. Op ${DAGEN[isoDag(datum) - 1]} ${fmtDate(datum)} kan je niets invullen; kies een andere datum.` : "";
     $("#fMeting").querySelectorAll("input, select, button").forEach((el) => { if (el.id !== "mDatum" && !el.closest("#mMenu")) el.disabled = dicht || !canWrite; });
   };
   vulAantallen(); tekenMenu(); zetOpen();
@@ -635,7 +639,7 @@ function beheerHtml() {
         <label class="hint" style="display:flex;gap:6px;align-items:center">Huidige bezetting${huidigVeld(a, "")}</label>
         <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
       </div>
-      <div class="open-dagen hint" data-open="${esc(a.id)}"><span>Open op</span>${DAGEN.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${openDagen(a).includes(i + 1) ? " checked" : ""}${dis()}><span>${d.slice(0, 2)}</span></label>`).join("")}<span>${openDagen(a).length ? "" : "(niets aangeduid = elke dag)"}</span></div>
+      <div class="open-dagen hint" data-open="${esc(a.id)}"><span>Open op</span>${DAGEN.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${openDagen(a).includes(i + 1) ? " checked" : ""}${dis()}><span>${d.slice(0, 2)}</span></label>`).join("")}<label>en de laatste<select data-laatste="${esc(a.id)}"${dis()}><option value="">–</option>${DAGEN.map((d, i) => `<option value="${i + 1}"${laatsteDag(a) === i + 1 ? " selected" : ""}>${d}</option>`).join("")}</select>van de maand</label><span>${heeftDagen(a) ? "" : "(niets aangeduid = elke dag)"}</span></div>
       <input data-oms="${esc(a.id)}" value="${esc(a.omschrijving || "")}" placeholder="Omschrijving (bv. aantal bewoners, keukenorganisatie)" aria-label="Omschrijving ${esc(a.naam)}"${dis()} style="margin-top:6px"></div>
       <div class="side">${canWrite ? `<button class="ghost" data-del="afdelingen/${esc(a.id)}" aria-label="Verwijder afdeling">✕</button>` : ""}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen afdelingen.</div>`}
     <p class="hint" style="margin-top:10px">Een afdeling met metingen, gevoeligheden of acties kan je niet verwijderen. Wis die eerst.</p>
@@ -690,6 +694,7 @@ function bindBeheer() {
     const d = [...box.querySelectorAll("input:checked")].map((x) => Number(x.value));
     write(() => sb.from("vv_afdelingen").update({ open_dagen: d.length && d.length < 7 ? d : null }).eq("id", box.dataset.open), "Openingsdagen bewaard");
   })));
+  document.querySelectorAll("[data-laatste]").forEach((sel) => (sel.onchange = () => write(() => sb.from("vv_afdelingen").update({ open_laatste: sel.value ? Number(sel.value) : null }).eq("id", sel.dataset.laatste), "Openingsdagen bewaard")));
   document.querySelectorAll("[data-oms]").forEach((inp) => (inp.onchange = () => write(() => sb.from("vv_afdelingen").update({ omschrijving: inp.value.trim() }).eq("id", inp.dataset.oms), "Omschrijving bewaard")));
   bindDeletes(document);
 }
@@ -1024,7 +1029,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030b";
+const APP_VERSIE = "20261030c";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });

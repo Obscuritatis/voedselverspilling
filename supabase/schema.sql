@@ -231,3 +231,8 @@ update public.vv_afdelingen set capaciteit = 23 where id = 'wzc-huize-nazareth-s
 update public.vv_afdelingen set capaciteit = 22 where id = 'wzc-huize-nazareth-sint-elisabeth-2' and capaciteit is null;
 -- Klaargemaakt: dieet- of gemixte maaltijden apart, als deel van porties (30/10/2026).
 alter table public.vv_maaltijden add column if not exists porties_dieet integer check (porties_dieet >= 0);
+-- La Gloriet (30/10/2026): open op de laatste vrijdag van de maand.
+alter table public.vv_afdelingen add column if not exists open_laatste smallint check (open_laatste between 1 and 7);
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, omschrijving, open_laatste) values
+  ('wzc-huize-nazareth-la-gloriet', 'wzc-huize-nazareth', 'La Gloriet', 'restaurant', 9, 'Feest voor de jarigen in Het Prieeltje, elke laatste vrijdag van de maand', 5)
+on conflict (id) do nothing;

@@ -297,6 +297,8 @@ form.f .tegel:has(input:checked) { border-color: var(--sc); background: color-mi
 .open-dagen { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px }
 .open-dagen label { display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 99px; cursor: pointer }
 .open-dagen input { width: auto; margin: 0 }
+.open-dagen label:has(select) { white-space: nowrap; gap: 6px }
+.open-dagen select { width: auto; padding: 2px 8px; min-height: 0 }
 /* Menu van de maaltijd, bij het wegen */
 .menu-blok { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px }
 .menu-kop { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px }
@@ -382,7 +384,7 @@ td.nowrap { white-space: nowrap }
 
 <script src="vendor/supabase-2.116.0.js"></script>
 <!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
-<script src="config.js?v=20261030b"></script>
-<script src="app.js?v=20261030b"></script>
+<script src="config.js?v=20261030c"></script>
+<script src="app.js?v=20261030c"></script>
 </body>
 </html>
