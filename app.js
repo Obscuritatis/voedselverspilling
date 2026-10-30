@@ -408,7 +408,8 @@ function tabMetingen(body, a, ms, msP) {
         <label>Maaltijd<select id="mMaaltijd">${opts(MAALTIJDEN, ui.mMaaltijd || "Middagmaal")}</select></label>
         <p class="full dicht-melding" id="mDicht" hidden></p>
         <div class="full stap"><span>1</span>Aantallen voor deze maaltijd, één keer</div>
-        <label>Klaargemaakt voor (personen)<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
+        <label>Klaargemaakt: standaard<input type="number" id="mPorties" min="0" step="1" inputmode="numeric"></label>
+        <label>Klaargemaakt: dieet/gemixt<input type="number" id="mDieet" min="0" step="1" inputmode="numeric"></label>
         <label>Aanwezig${a.type === "patientenafdeling" ? "e patiënten" : a.type === "restaurant" ? "e eters" : a.type === "dagverzorging" ? "e gasten" : "e bewoners"}<input type="number" id="mAanwezig" min="0" step="1" inputmode="numeric"></label>
         <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" id="mAantBewaar"${dis()}>Aantallen bewaren</button><span class="hint" id="mAantInfo"></span></div>
         <div class="full stap"><span>2</span>Wat weeg je?</div>
@@ -427,7 +428,7 @@ function tabMetingen(body, a, ms, msP) {
     const mt = ofAfd(S.maaltijden, a.id).sort((x, y) => (y.datum || "").localeCompare(x.datum || "") || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
     if (!mt.length) return "";
     return `<section class="panel" style="margin-top:24px"><h3 style="margin-bottom:6px">Maaltijden</h3><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Maaltijd</th><th style="text-align:right">Klaargemaakt</th><th style="text-align:right">Aanwezig</th><th style="text-align:right">Verschil</th><th style="text-align:right">Gewogen</th><th style="text-align:right">Per aanwezige</th><th></th></tr></thead><tbody>
-    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td><td class="num">${kg(k)}</td><td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
+    ${mt.slice(0, 40).map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); const v = x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : null; return `<tr><td>${fmtDate(x.datum)}</td><td>${esc(x.maaltijd)}</td><td class="num">${x.porties ?? "–"}${x.portiesDieet ? `<br><span class="hint">waarvan ${x.portiesDieet} dieet/gemixt</span>` : ""}</td><td class="num">${x.aanwezig ?? "–"}</td><td class="num">${v == null ? "–" : v > 0 ? `+${v}` : v}</td><td class="num">${kg(k)}</td><td class="num">${x.aanwezig ? gram((k * 1000) / x.aanwezig) : "–"}</td><td>${canWrite ? `<button class="ghost" data-del="maaltijden/${esc(x.id)}" aria-label="Verwijder aantallen">✕</button>` : ""}</td></tr>`; }).join("")}
     </tbody></table></div><p class="hint" style="margin-top:8px">Verschil = klaargemaakt min aanwezigen. Een plus betekent dat er te veel klaargemaakt werd.</p></section>`;
   })()}
   <section class="panel" style="margin-top:24px"><div class="row-head" style="margin-bottom:6px"><h3>Recente wegingen</h3>${ms.length && canWrite ? `<button type="button" class="ghost" data-wis-afd="${esc(a.id)}">Alle metingen van ${esc(a.naam)} wissen</button>` : ""}</div>
@@ -440,16 +441,21 @@ function tabMetingen(body, a, ms, msP) {
   const huidig = () => S.maaltijden.find((x) => x.afdelingId === a.id && x.datum === ($("#mDatum").value || today()) && x.maaltijd === $("#mMaaltijd").value);
   const vulAantallen = () => {
     const h = huidig();
-    $("#mPorties").value = h?.porties ?? ""; $("#mAanwezig").value = h?.aanwezig ?? "";
+    // porties is het totaal; standaard = totaal min dieet/gemixt.
+    $("#mPorties").value = h?.porties != null ? h.porties - (h.portiesDieet || 0) : ""; $("#mDieet").value = h?.portiesDieet ?? ""; $("#mAanwezig").value = h?.aanwezig ?? "";
     $("#mAantInfo").textContent = h ? "Al ingevuld voor deze maaltijd; pas aan indien nodig." : "Nog niet ingevuld voor deze maaltijd.";
   };
   const getalOfNull = (v) => (v === "" || v == null ? null : Math.max(0, Math.round(Number(v)) || 0));
   // Bewaart porties en aanwezigen als ze ingevuld en gewijzigd zijn. Geeft false bij een fout.
   const bewaarAantallen = async (melding) => {
-    const porties = getalOfNull($("#mPorties").value), aanwezig = getalOfNull($("#mAanwezig").value), h = huidig();
+    const standaard = getalOfNull($("#mPorties").value), dieet = getalOfNull($("#mDieet").value), aanwezig = getalOfNull($("#mAanwezig").value), h = huidig();
+    const porties = standaard == null && dieet == null ? null : (standaard || 0) + (dieet || 0);
     if (porties == null && aanwezig == null) { if (melding) toast("Vul in voor hoeveel personen er klaargemaakt werd, of de aanwezigen."); return true; }
-    if (h && h.porties === porties && h.aanwezig === aanwezig) { if (melding) toast("Aantallen zijn al bewaard."); return true; }
-    const rij = naarDb({ siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, porties, aanwezig });
+    if (h && h.porties === porties && h.aanwezig === aanwezig && (h.portiesDieet ?? null) === dieet) { if (melding) toast("Aantallen zijn al bewaard."); return true; }
+    const rec = { siteId: a.siteId, afdelingId: a.id, datum: $("#mDatum").value || today(), maaltijd: $("#mMaaltijd").value, porties, aanwezig };
+    // Alleen meesturen als het gebruikt wordt, zodat bewaren blijft werken zolang het SQL-script niet gelopen heeft.
+    if (dieet != null || h?.portiesDieet != null) rec.portiesDieet = dieet;
+    const rij = naarDb(rec);
     return write(() => sb.from("vv_maaltijden").upsert(rij, { onConflict: "afdeling_id,datum,maaltijd" }), melding ? "Aantallen bewaard" : null);
   };
   const site = S.sites.find((x) => x.id === a.siteId);
@@ -881,10 +887,10 @@ async function exporteerVerslag(afdId) {
 
   // Maaltijden (porties en aanwezigen)
   const mts = S.maaltijden.filter((x) => ids.has(x.afdelingId) && inPeriode(x)).sort((x, y) => (x.datum || "").localeCompare(y.datum || "") || naamVan(x.afdelingId).localeCompare(naamVan(y.afdelingId)) || MAALTIJDEN.indexOf(x.maaltijd) - MAALTIJDEN.indexOf(y.maaltijd));
-  const mb = blad(wb, "Maaltijden", "Maaltijden: klaargemaakt en aanwezig", info, [12, 20, 14, 12, 12, 12, 12, 16], XL.stroom.overproductie[1]);
-  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Klaargemaakt voor"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
-    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
-    (r, k) => { const x = mts[k]; if (x.porties != null && x.aanwezig != null && x.porties !== x.aanwezig) kleur(r.getCell(6), x.porties > x.aanwezig ? XL.tegel.amber : XL.tegel.blauw); });
+  const mb = blad(wb, "Maaltijden", "Maaltijden: klaargemaakt en aanwezig", info, [12, 20, 14, 12, 14, 14, 12, 12, 12, 16], XL.stroom.overproductie[1]);
+  tabel(mb.ws, mb.start, [["Datum"], ["Afdeling"], ["Maaltijd"], ["Standaard"], ["Dieet/gemixt"], ["Klaargemaakt totaal"], ["Aanwezig"], ["Verschil"], ["Gewogen (kg)", , "0.0"], ["Per aanwezige (g)", , "0"]],
+    mts.map((x) => { const k = sum(ms.filter((m) => maalKey(m) === maalKey(x))); return [fmtD(x.datum), naamVan(x.afdelingId), x.maaltijd, x.porties != null ? x.porties - (x.portiesDieet || 0) : "", x.portiesDieet ?? "", x.porties ?? "", x.aanwezig ?? "", x.porties != null && x.aanwezig != null ? x.porties - x.aanwezig : "", kgNum(k), x.aanwezig ? Math.round((k * 1000) / x.aanwezig) : ""]; }),
+    (r, k) => { const x = mts[k]; if (x.porties != null && x.aanwezig != null && x.porties !== x.aanwezig) kleur(r.getCell(8), x.porties > x.aanwezig ? XL.tegel.amber : XL.tegel.blauw); });
   mb.ws.views = [{ state: "frozen", ySplit: mb.start, showGridLines: false }];
 
   // Menu's van de site, met wat er per gerecht gewogen werd
@@ -1015,7 +1021,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261029d";
+const APP_VERSIE = "20261030a";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });

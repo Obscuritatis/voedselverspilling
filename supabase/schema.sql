@@ -229,3 +229,5 @@ update public.vv_afdelingen set open_dagen = array[1, 4]::smallint[] where id = 
 update public.vv_afdelingen set capaciteit = 21 where id in ('wzc-huize-nazareth-sint-jozef', 'wzc-huize-nazareth-sint-jozef-3') and capaciteit is null;
 update public.vv_afdelingen set capaciteit = 23 where id = 'wzc-huize-nazareth-sint-elisabeth' and capaciteit is null;
 update public.vv_afdelingen set capaciteit = 22 where id = 'wzc-huize-nazareth-sint-elisabeth-2' and capaciteit is null;
+-- Klaargemaakt: dieet- of gemixte maaltijden apart, als deel van porties (30/10/2026).
+alter table public.vv_maaltijden add column if not exists porties_dieet integer check (porties_dieet >= 0);
