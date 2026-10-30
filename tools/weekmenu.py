@@ -18,7 +18,13 @@ for datum, dag in d["dagen"].items():
         else:
             rows.append(f"  ({q(datum)}, 'Middagmaal', {q(K[k])}, {q(g)})")
     rows.append(f"  ({q(datum)}, 'Avondmaal', 'Brood en beleg', {q(dag['avond'] + B)})")
-prods = "".join(f"insert into public.vv_producten (naam, component, eenheid, vervangt) values ({q(n)}, {q(K[c])}, 'g', array[{', '.join(q(K[v]) for v in vv)}]::text[]) on conflict do nothing;\n" for n, c, vv in d.get("producten", []))
+# Tijdelijke richtlijnen van Johan (30/10): een nieuw samengesteld gerecht krijgt de som van zijn onderdelen.
+R = {"groenten": (225, "groenten (225 g)"), "vlees": (90, "vlees, vis of vegetarisch (90 g)"), "saus": (75, "saus (75 ml)"), "zetmeel": (175, "koolhydraten (175 g)")}
+def norm(n, c, vv):
+    if c != "samen": return ""
+    delen = [R[v][1] for v in vv if v in R]
+    return f"update public.vv_producten set gram = {sum(R[v][0] for v in vv if v in R)}, richtlijn = true, toelichting = {q('Som van de richtlijnen voor ' + ', '.join(delen) + '.')} where naam = {q(n)} and gram is null;\n" if delen else ""
+prods = "".join(f"insert into public.vv_producten (naam, component, eenheid, vervangt) values ({q(n)}, {q(K[c])}, 'g', array[{', '.join(q(K[v]) for v in vv)}]::text[]) on conflict do nothing;\n" + norm(n, c, vv) for n, c, vv in d.get("producten", []))
 dagen = list(d["dagen"])
 open(sys.argv[2], "w").write(f"""-- Centraal weekmenu van de hoofdkeuken, {d['titel']}.
 -- Bij ontbijt en avondmaal: standaard keuze wit, grijs of meergranen brood en standaard beleg (afwisselend).

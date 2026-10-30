@@ -1,6 +1,7 @@
 -- Centraal weekmenu van de hoofdkeuken, 09/11/2026 tot 15/11/2026.
 -- Bij ontbijt en avondmaal: standaard keuze wit, grijs of meergranen brood en standaard beleg (afwisselend).
 insert into public.vv_producten (naam, component, eenheid, vervangt) values ('Spaghetti bolognaise', 'Samengesteld gerecht', 'g', array['Vlees, vis of vegetarisch', 'Saus', 'Zetmeel (aardappel, pasta, rijst)', 'Groenten']::text[]) on conflict do nothing;
+update public.vv_producten set gram = 565, richtlijn = true, toelichting = 'Som van de richtlijnen voor vlees, vis of vegetarisch (90 g), saus (75 ml), koolhydraten (175 g), groenten (225 g).' where naam = 'Spaghetti bolognaise' and gram is null;
 insert into public.vv_menus (site_id, datum, maaltijd, component, gerecht)
 select null, v.datum::date, v.maaltijd, v.component, v.gerecht from (values
   ('2026-11-09', 'Ontbijt', 'Brood en beleg', 'Petit Suisse kaasje · wit, grijs of meergranen brood · standaard beleg (afwisselend)'),
