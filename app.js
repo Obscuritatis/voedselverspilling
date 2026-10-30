@@ -306,9 +306,10 @@ function perAanwezige(afdId, ms) {
   const n = mt.reduce((t, x) => t + Number(x.aanwezig), 0);
   return n ? (k * 1000) / n : null;
 }
+// Klaargemaakt en aanwezigen apart opgeteld: bij een restaurant wordt vaak enkel "klaargemaakt voor" ingevuld.
 function portiesSaldo(afdId) {
-  const mt = aantallenVan(afdId).filter((x) => x.porties != null && x.aanwezig != null);
-  return mt.length ? { porties: mt.reduce((t, x) => t + Number(x.porties), 0), aanwezig: mt.reduce((t, x) => t + Number(x.aanwezig), 0) } : null;
+  const mt = aantallenVan(afdId), p = mt.filter((x) => x.porties != null), w = mt.filter((x) => x.aanwezig != null);
+  return p.length || w.length ? { porties: p.length ? p.reduce((t, x) => t + Number(x.porties), 0) : null, aanwezig: w.length ? w.reduce((t, x) => t + Number(x.aanwezig), 0) : null } : null;
 }
 
 function focusInfo(a) {
@@ -637,7 +638,7 @@ function renderAfdeling(main, a) {
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
-      ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? ` · klaargemaakt voor ${ps.porties}, ${ps.aanwezig} aanwezigen` : ", vul de aanwezigen in"; })()}`, "t-amber")}
+      ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? [ps.porties != null ? ` · klaargemaakt voor ${ps.porties}` : "", ps.aanwezig != null ? `${ps.porties != null ? "," : " ·"} ${ps.aanwezig} aanwezigen` : ""].join("") : ", vul de aanwezigen in"; })()}`, "t-amber")}
       ${stat("vlag", act.filter((x) => x.status !== "Afgerond").length, `open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden`, "t-green")}
     </div>
     <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${icon({ metingen: "weegschaal", gevoeligheden: "lamp", acties: "vlag" }[k])}${l}</button>`).join("")}</div>
@@ -1128,11 +1129,11 @@ async function exporteerVerslag(afdId) {
     const m = ofAfd(ms, a.id), dagen = new Set(m.map((x) => x.datum)).size, top = groupKg(m, "stroom")[0];
     const g = ofAfd(gev, a.id), x = ofAfd(act, a.id);
     const gp = gramPerPlaats(a, m), pa = perAanwezige(a.id, m), ps = portiesSaldo(a.id);
-    return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", huidig(a) ?? "", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), ps ? ps.porties : "", ps ? ps.aanwezig : "", pa == null ? "" : Math.round(pa), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
+    return [a.naam, typeNaam(a.type), bezettingTekst(a) || "wisselend", totaalNu(a) ?? "", kgNum(sum(m)), m.length, dagen ? kgNum(sum(m) / dagen) : "", gp == null ? "" : Math.round(gp), ps?.porties ?? "", ps?.aanwezig ?? "", pa == null ? "" : Math.round(pa), top ? (STROMEN[top[0]] || top[0]).split(" (")[0] : "", g.length, g.filter((y) => y.impact === "hoog").length, x.filter((y) => y.status !== "Afgerond").length, focusInfo(a)[1]];
   });
-  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Huidige bezetting"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per bewoner per meetdag (g)", , "0"], ["Klaargemaakt voor"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
+  const afdKol = [["Afdeling"], ["Type"], ["Max. bezetting"], ["Huidige bezetting (standaard + gemixt/diëten)"], ["Verspild (kg)", , "0.0"], ["Metingen"], ["Gem. per meetdag (kg)", , "0.0"], ["Per bewoner per meetdag (g)", , "0"], ["Klaargemaakt voor"], ["Aanwezigen"], ["Per aanwezige (g)", , "0"], ["Grootste soort verlies"], ["Gevoeligheden"], ["Waarvan hoog"], ["Open acties"], ["Focus"]];
   rij = tabel(o.ws, rij + 1, afdKol, perAfd, (r, k) => kleur(r.getCell(16), XL.focus[focusInfo(afd[k])[0]]));
-  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = afd.reduce((n, x) => n + (huidig(x) || 0), 0) || ""; t.getCell(5).value = kgNum(totKg); t.getCell(5).numFmt = "0.0"; t.getCell(6).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
+  if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = afd.reduce((n, x) => n + (totaalNu(x) || 0), 0) || ""; t.getCell(9).value = afd.reduce((n, x) => n + (portiesSaldo(x.id)?.porties || 0), 0) || ""; t.getCell(10).value = afd.reduce((n, x) => n + (portiesSaldo(x.id)?.aanwezig || 0), 0) || ""; t.getCell(5).value = kgNum(totKg); t.getCell(5).numFmt = "0.0"; t.getCell(6).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
   const verdeling = (titel, key, labels, lijst = ms) => {
     rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 14, color: { argb: XL.donker } };
     const g = groupKg(lijst, key), max = g.length ? g[0][1] : 1;
@@ -1293,7 +1294,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030s";
+const APP_VERSIE = "20261030t";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
