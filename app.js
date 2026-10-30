@@ -25,7 +25,7 @@ const ICON = {
 };
 const icon = (n, cls = "ic") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n] || ""}</svg>`;
 const kort = (k) => (STROMEN[k] || k).split(" (")[0];
-const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Gemixt (alles samen)", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
+const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Samengesteld gerecht 2", "Gemixt (alles samen)", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
 const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Tussendoortje", "Hele dag"];
 const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
 const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
@@ -152,7 +152,7 @@ const heeftDagen = (a) => openDagen(a).length > 0 || laatsteDag(a) != null;
 const openOp = (a, datum) => !heeftDagen(a) || openDagen(a).includes(isoDag(datum)) || (laatsteDag(a) === isoDag(datum) && isLaatste(datum));
 const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); if (laatsteDag(a)) d.push(`de laatste ${DAGEN[laatsteDag(a) - 1]} van de maand`); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
-const MENU_COMP = ["Soep", "Samengesteld gerecht", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert", "Brood en beleg"];
+const MENU_COMP = ["Soep", "Samengesteld gerecht", "Samengesteld gerecht 2", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert", "Brood en beleg"];
 const kortComp = (c) => c.split(/[,(]/)[0].trim();
 // Het centrale menu van de hoofdkeuken (zonder site) geldt overal; een gerecht dat voor een site apart ingevuld is, gaat voor.
 const menuVan = (siteId, datum, maaltijd) => {
@@ -174,12 +174,12 @@ const normVan = (p) => { if (!p) return null; const o = onderdelenVan(p); if (o.
 const ZETMEEL = "Zetmeel (aardappel, pasta, rijst)";
 const normProduct = (component, gerecht) => { if (component !== ZETMEEL) return S.producten.find((p) => p.component === component && p.naam === component) || null; const p = productVan(gerecht); return p && p.component === ZETMEEL ? p : null; };
 // Samengesteld gerecht (lasagne, stoemp …): één hoeveelheid per persoon; de onderdelen die het vervangt, tellen dan niet apart.
-const SAMEN = "Samengesteld gerecht";
+const SAMEN = "Samengesteld gerecht", SAMEN2 = "Samengesteld gerecht 2";
 const VERVANGBAAR = ["Vlees, vis of vegetarisch", "Saus", ZETMEEL, "Groenten"];
 const samenVan = (gerecht) => { const p = productVan(gerecht); return p && p.component === SAMEN ? p : null; };
 const vervangtVan = (p) => (Array.isArray(p?.vervangt) ? p.vervangt : []).filter((c) => VERVANGBAAR.includes(c));
 // Norm voor een menuregel: een samengesteld gerecht wint, in welk veld het ook staat.
-const menuProduct = (component, gerecht) => samenVan(gerecht) || (component === SAMEN ? null : normProduct(component, gerecht));
+const menuProduct = (component, gerecht) => samenVan(gerecht) || (component === SAMEN || component === SAMEN2 ? null : normProduct(component, gerecht));
 const normTekst = (p) => { const n = normVan(p); return n == null ? "" : `${Math.round(n)} ${p.eenheid === "ml" ? "ml" : "g"} per persoon`; };
 // Wat de keuken voorzag voor één maaltijd van een afdeling, naast wat er gewogen werd.
 // Het menu geldt (voorlopig) enkel voor standaardmaaltijden: gram per persoon × standaardporties.
@@ -206,7 +206,7 @@ function vergelijking(afdId, datum, maaltijd, ms) {
   });
   const somNorm = rijen.reduce((t, x) => t + (x.norm || 0), 0);
   const voorzien = somNorm ? (somNorm * standaard) / 1000 : null;
-  return { rijen, voorzien, gewogen: sum(gew), dieet, ontbreekt: rijen.filter((x) => x.norm == null).map((x) => (x.component === ZETMEEL || x.component === SAMEN ? x.gerecht : kortComp(x.component).toLowerCase())) };
+  return { rijen, voorzien, gewogen: sum(gew), dieet, ontbreekt: rijen.filter((x) => x.norm == null).map((x) => (x.component === ZETMEEL || x.component === SAMEN || x.component === SAMEN2 ? x.gerecht : kortComp(x.component).toLowerCase())) };
 }
 // Bewaart een menu voor één site, of centraal (siteId null). Een site bewaart enkel wat afwijkt van het centrale menu.
 function bewaarMenuRijen(siteId, datum, maaltijd, waarden, okMsg = "Menu bewaard") {
@@ -221,7 +221,7 @@ function bewaarMenuRijen(siteId, datum, maaltijd, waarden, okMsg = "Menu bewaard
   if (!ops.length) return Promise.resolve(true);
   return write(async () => (await Promise.all(ops.map((f) => f()))).find((x) => x.error) || { error: null }, okMsg);
 }
-const lijstVoor = (c) => (c === ZETMEEL ? ' list="dlProducten"' : c === SAMEN ? ' list="dlSamen"' : "");
+const lijstVoor = (c) => (c === ZETMEEL ? ' list="dlProducten"' : c === SAMEN || c === SAMEN2 ? ' list="dlSamen"' : "");
 const productLijst = () => `<datalist id="dlSamen">${S.producten.filter((x) => x.component === SAMEN).sort((x, y) => x.naam.localeCompare(y.naam)).map((x) => `<option value="${esc(x.naam)}">`).join("")}</datalist><datalist id="dlProducten">${S.producten.filter((x) => x.component === ZETMEEL).sort((x, y) => x.naam.localeCompare(y.naam)).map((x) => `<option value="${esc(x.naam)}">`).join("")}</datalist>`;
 function vergelijkHtml(a, datum, maaltijd, ms) {
   const v = vergelijking(a.id, datum, maaltijd, ms);
@@ -370,7 +370,7 @@ function renderProductie(main, sites) {
   const afwijk = [...new Set(S.menus.filter((x) => x.siteId && x.datum === datum && x.maaltijd === maaltijd).map((x) => x.siteId))].map((id) => S.sites.find((x) => x.id === id)?.naam).filter(Boolean);
   const prods = S.producten.filter((x) => x.component === ZETMEEL).sort((x, y) => x.naam.localeCompare(y.naam));
   const samens = S.producten.filter((x) => x.component === SAMEN).sort((x, y) => x.naam.localeCompare(y.naam));
-  const normHint = (c, g) => { const p = menuProduct(c, g); return !g ? "" : !p ? (c === ZETMEEL ? "nog niet bij de zetmeelsoorten" : c === SAMEN ? "nog niet bij de samengestelde gerechten" : "nog geen gram per persoon") : (normTekst(p) || "nog geen gram per persoon") + (samenVan(g) && vervangtVan(p).length ? ` (vervangt ${vervangtVan(p).map((x) => kortComp(x).toLowerCase()).join(", ")})` : ""); };
+  const normHint = (c, g) => { const p = menuProduct(c, g); return !g ? "" : !p ? (c === ZETMEEL ? "nog niet bij de zetmeelsoorten" : c === SAMEN || c === SAMEN2 ? "nog niet bij de samengestelde gerechten" : "nog geen gram per persoon") : (normTekst(p) || "nog geen gram per persoon") + (samenVan(g) && vervangtVan(p).length ? ` (vervangt ${vervangtVan(p).map((x) => kortComp(x).toLowerCase()).join(", ")})` : ""); };
   main.innerHTML = `
     <button type="button" class="terug" data-naar="start">‹ Startscherm</button>
     <div><div class="eyebrow">Hoofdkeuken</div><h2>Productie</h2><p class="hint">Eén keuken kookt voor alle sites. Vul per onderdeel in hoeveel er per persoon klaargemaakt wordt; bij het wegen vergelijkt de app dat met wat terugkomt.</p></div>
@@ -386,7 +386,7 @@ function renderProductie(main, sites) {
     </section>
     <section class="panel" style="margin-top:24px">
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Gram per persoon per onderdeel</h3><p class="hint">Eén hoeveelheid per onderdeel, welk gerecht het ook is. Wordt bewaard zodra je het veld verlaat.</p></div></div>
-      <div class="onderdelen">${MENU_COMP.filter((c) => c !== ZETMEEL).map((c) => { const p = normProduct(c); return `<label><span>${esc(kortComp(c) === "Vlees" ? "Vlees, vis of vegetarisch" : kortComp(c))}</span><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-ogram="${esc(c)}" value="${esc(p?.gram ?? "")}" aria-label="Per persoon ${esc(c)}"${dis()}><select data-oeenh="${esc(c)}" aria-label="Eenheid ${esc(c)}"${dis()}>${opts(["g", "ml"], p?.eenheid || (c === "Soep" ? "ml" : "g"))}</select></span></label>`; }).join("")}</div>
+      <div class="onderdelen">${MENU_COMP.filter((c) => c !== ZETMEEL && c !== SAMEN && c !== SAMEN2).map((c) => { const p = normProduct(c); return `<label><span>${esc(kortComp(c) === "Vlees" ? "Vlees, vis of vegetarisch" : kortComp(c))}</span><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-ogram="${esc(c)}" value="${esc(p?.gram ?? "")}" aria-label="Per persoon ${esc(c)}"${dis()}><select data-oeenh="${esc(c)}" aria-label="Eenheid ${esc(c)}"${dis()}>${opts(["g", "ml"], p?.eenheid || (c === "Soep" ? "ml" : "g"))}</select></span></label>`; }).join("")}</div>
     </section>
     <section class="panel" style="margin-top:24px">
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Zetmeel per soort</h3><p class="hint">Bij zetmeel verschilt de hoeveelheid per soort. In het menu kies je de soort uit deze lijst.</p></div></div>
@@ -1213,7 +1213,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030j";
+const APP_VERSIE = "20261030k";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
