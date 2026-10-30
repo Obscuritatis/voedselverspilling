@@ -262,7 +262,13 @@ function groupKg(ms, key) { const g = {}; ms.forEach((m) => (g[m[key]] = (g[m[ke
 const plaatsen = (a) => (Number(a.capaciteit) || 0) + (Number(a.kortverblijf) || 0);
 const bezettingTekst = (a) => a.capaciteit ? `${a.capaciteit}${a.kortverblijf ? ` + ${a.kortverblijf} kortverblijf` : ""}` : "";
 // Huidige bezetting: vul je zelf in en verandert; zonder huidige bezetting rekenen we met de maximale.
+// Huidige bezetting = standaardmaaltijden; gemixt/diëten staan apart (kolom huidige_dieet). Samen = alle bewoners.
 const huidig = (a) => (a.huidigeBezetting == null ? null : Number(a.huidigeBezetting));
+const dieetNu = (a) => (a.huidigeDieet == null ? null : Number(a.huidigeDieet));
+const totaalNu = (a) => (huidig(a) == null && dieetNu(a) == null ? null : (huidig(a) || 0) + (dieetNu(a) || 0));
+const dieetVeld = (a, cls = "huidig-veld") => canWrite
+  ? `<input type="number" min="0" step="1" inputmode="numeric" class="${cls}" data-dieet="${esc(a.id)}" value="${esc(a.huidigeDieet ?? "")}" placeholder="–" aria-label="Gemixt/diëten ${esc(a.naam)}">`
+  : `${dieetNu(a) ?? `<span class="hint">–</span>`}`;
 const huidigVeld = (a, cls = "huidig-veld") => canWrite
   ? `<input type="number" min="0" step="1" inputmode="numeric" class="${cls}" data-huidig="${esc(a.id)}" value="${esc(a.huidigeBezetting ?? "")}" placeholder="${plaatsen(a) || "–"}" aria-label="Huidige bezetting ${esc(a.naam)}"${a.huidigeBezettingOp ? ` title="Bijgewerkt op ${esc(fmtDate(a.huidigeBezettingOp))}"` : ""}>`
   : `${huidig(a) ?? `<span class="hint">–</span>`}`;
@@ -274,10 +280,17 @@ function bindHuidig(root) {
       write(() => sb.from("vv_afdelingen").update({ huidige_bezetting: v, huidige_bezetting_op: v == null ? null : today() }).eq("id", inp.dataset.huidig), "Huidige bezetting bewaard");
     };
   });
+  root.querySelectorAll("[data-dieet]").forEach((inp) => {
+    inp.onclick = (e) => e.stopPropagation(); inp.onkeydown = (e) => e.stopPropagation();
+    inp.onchange = () => {
+      const v = inp.value === "" ? null : Math.max(0, Math.round(Number(inp.value)) || 0);
+      write(() => sb.from("vv_afdelingen").update({ huidige_dieet: v, huidige_bezetting_op: today() }).eq("id", inp.dataset.dieet), "Gemixt/diëten bewaard");
+    };
+  });
 }
 // Gemiddelde verspilling per bewoner (huidige bezetting, anders maximale) per meetdag, in gram.
 function gramPerPlaats(a, ms) {
-  const n = huidig(a) || plaatsen(a), dagen = new Set(ms.map((m) => m.datum)).size;
+  const n = totaalNu(a) || plaatsen(a), dagen = new Set(ms.map((m) => m.datum)).size;
   return n && dagen ? (sum(ms) * 1000) / dagen / n : null;
 }
 const gram = (g) => Math.round(g).toLocaleString("nl-BE") + " g";
@@ -397,8 +410,8 @@ function productieItems(menu) {
 }
 function personenVoor(siteId, datum) {
   const afd = S.afdelingen.filter((a) => a.siteId === siteId && openOp(a, datum));
-  const n = (a) => dagBezetting(a, datum) ?? (a.huidigeBezetting != null ? Number(a.huidigeBezetting) : a.capaciteit != null ? Number(a.capaciteit) : null);
-  return { personen: afd.reduce((t, a) => t + (n(a) || 0), 0), onbekend: afd.filter((a) => n(a) == null).map((a) => a.naam) };
+  const n = (a) => dagBezetting(a, datum) ?? (a.huidigeBezetting != null ? Number(a.huidigeBezetting) : a.capaciteit != null ? Math.max(0, Number(a.capaciteit) - (dieetNu(a) || 0)) : null);
+  return { personen: afd.reduce((t, a) => t + (n(a) || 0), 0), dieet: afd.reduce((t, a) => t + (dagBezetting(a, datum) == null ? dieetNu(a) || 0 : 0), 0), onbekend: afd.filter((a) => n(a) == null).map((a) => a.naam) };
 }
 const hoeveel = (gram, eenheid) => (eenheid === "ml" ? (Math.round(gram / 100) / 10).toLocaleString("nl-BE", { minimumFractionDigits: 1 }) + " l" : kg(gram / 1000));
 function teProducerenHtml(sites, datum, maaltijd) {
@@ -410,8 +423,8 @@ function teProducerenHtml(sites, datum, maaltijd) {
   const totaal = (gerecht) => { const it = rijen.find((x) => x.gerecht === gerecht); if (it.norm == null) return "–"; return hoeveel(perSite.reduce((t, ps) => { const i = ps.items.find((x) => x.gerecht === gerecht); return t + (i?.norm ? i.norm * ps.personen : 0); }, 0), it.eenheid); };
   const onbekend = perSite.filter((ps) => ps.onbekend.length);
   return `<section class="panel" style="margin-top:24px">
-    <div class="form-kop"><span class="kop-ic">${icon("mensen")}</span><div><h3>Te produceren: ${esc(maaltijd.toLowerCase())} ${esc(fmtDate(datum))}</h3><p class="hint">Hoeveelheid per persoon × gekende aantallen per site (huidige bezetting, anders max. bezetting). Iedereen telt mee met de standaardhoeveelheid; diëten volgen later.</p></div></div>
-    <div class="tablewrap"><table class="productie"><thead><tr><th>Gerecht</th><th class="num">Per persoon</th>${perSite.map((ps) => `<th class="num">${esc(ps.st.naam)}<br><span class="hint">${ps.personen} pers.</span></th>`).join("")}<th class="num">Totaal<br><span class="hint">${perSite.reduce((t, ps) => t + ps.personen, 0)} pers.</span></th></tr></thead><tbody>
+    <div class="form-kop"><span class="kop-ic">${icon("mensen")}</span><div><h3>Te produceren: ${esc(maaltijd.toLowerCase())} ${esc(fmtDate(datum))}</h3><p class="hint">Hoeveelheid per persoon × gekende aantallen per site (huidig standaard, anders max. bezetting). Gemixt/diëten staan apart vermeld en zijn nog niet berekend.</p></div></div>
+    <div class="tablewrap"><table class="productie"><thead><tr><th>Gerecht</th><th class="num">Per persoon</th>${perSite.map((ps) => `<th class="num">${esc(ps.st.naam)}<br><span class="hint">${ps.personen} pers.</span>${ps.dieet ? `<br><span class="hint">+ ${ps.dieet} gemixt/diëten</span>` : ""}</th>`).join("")}<th class="num">Totaal<br><span class="hint">${perSite.reduce((t, ps) => t + ps.personen, 0)} pers.</span></th></tr></thead><tbody>
     ${rijen.map((it) => `<tr><td>${esc(it.gerecht)}</td><td class="num">${it.norm == null ? "–" : `${Math.round(it.norm)} ${it.eenheid}`}</td>${perSite.map((ps) => `<td class="num">${cel(ps, it.gerecht)}</td>`).join("")}<td class="num"><b>${totaal(it.gerecht)}</b></td></tr>`).join("")}
     </tbody></table></div>
     ${onbekend.length ? `<p class="hint" style="margin-top:8px">Zonder gekend aantal (telt niet mee): ${onbekend.map((ps) => `${esc(ps.st.naam)}: ${esc(ps.onbekend.join(", "))}`).join("; ")}. Vul de bezetting in bij Beheer.</p>` : ""}
@@ -582,19 +595,20 @@ function renderOverzicht(main) {
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
       <div class="tablewrap"><table class="afd-tabel">
-        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten er nu verblijven">Huidige bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten nu een standaardmaaltijd krijgen">Huidig standaard</th><th style="text-align:right" title="Bewoners of patiënten met een gemixte maaltijd of een dieet">Gemixt/diëten</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
             <td><div class="afd-cel"><i class="ndot d-${focusInfo(a)[0]}"></i><div><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></div></div></td>
             <td class="num">${bezettingTekst(a) || `<span class="hint">wisselend</span>`}</td>
             <td class="num">${huidigVeld(a)}</td>
+            <td class="num">${dieetVeld(a)}</td>
             <td class="num">${kg(k)}</td>
             <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
             <td class="num">${(() => { const pa = perAanwezige(a.id, ofAfd(ms, a.id)); if (pa != null) return gram(pa); const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : `<span class="hint" title="per bewoner per meetdag">${gram(g)}/bewoner</span>`; })()}</td>
             <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
             <td class="nowrap">${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
             <td class="focus">${focusFor(a)}</td>
-          </tr>`; }).join("") || `<tr><td colspan="9" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+          </tr>`; }).join("") || `<tr><td colspan="10" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
       </table></div>
     </section>
     <div class="two">
@@ -619,7 +633,7 @@ function renderAfdeling(main, a) {
   const act = ofAfd(S.acties, a.id).sort((x, y) => STATUS.indexOf(x.status) - STATUS.indexOf(y.status));
   const tabs = [["metingen", `Metingen (${ms.length})`], ["gevoeligheden", `Gevoeligheden (${gev.length})`], ["acties", `Acties (${act.length})`]];
   main.innerHTML = `
-    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidige bezetting ${huidigVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${dagBezettingTekst(a) ? `<p class="hint">Bezetting per dag: ${esc(dagBezettingTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
+    <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidig standaard ${huidigVeld(a)}</label><label class="hint">Gemixt/diëten ${dieetVeld(a)}</label>${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${dagBezettingTekst(a) ? `<p class="hint">Bezetting per dag: ${esc(dagBezettingTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
       ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
@@ -684,7 +698,7 @@ function tabMetingen(body, a, ms, msP) {
     // porties is het totaal; standaard = totaal min dieet/gemixt.
     $("#mPorties").value = h?.porties != null ? h.porties - (h.portiesDieet || 0) : ""; $("#mDieet").value = h?.portiesDieet ?? "";
     // Zonder bewaarde aantallen nemen we de huidige bezetting van de afdeling over als aanwezigen.
-    const bezet = dagBezetting(a, $("#mDatum").value || today()) ?? a.huidigeBezetting;
+    const bezet = dagBezetting(a, $("#mDatum").value || today()) ?? totaalNu(a);
     const vanBezetting = h?.aanwezig == null && bezet != null;
     $("#mAanwezig").value = h?.aanwezig ?? bezet ?? "";
     aantVast = !!h;
@@ -883,7 +897,8 @@ function beheerHtml() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         <label class="hint" style="display:flex;gap:6px;align-items:center">Max. plaatsen<input type="number" min="0" data-cap="${esc(a.id)}" value="${esc(a.capaciteit ?? "")}" aria-label="Plaatsen ${esc(a.naam)}"${dis()} style="width:5rem"></label>
         <label class="hint" style="display:flex;gap:6px;align-items:center">Kortverblijf<input type="number" min="0" data-kv="${esc(a.id)}" value="${esc(a.kortverblijf ?? "")}" aria-label="Kortverblijven ${esc(a.naam)}"${dis()} style="width:5rem"></label>
-        <label class="hint" style="display:flex;gap:6px;align-items:center">Huidige bezetting${huidigVeld(a, "")}</label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Huidig standaard${huidigVeld(a, "")}</label>
+        <label class="hint" style="display:flex;gap:6px;align-items:center">Gemixt/diëten${dieetVeld(a, "")}</label>
         <input data-info="${esc(a.id)}" value="${esc(a.aantallenInfo || "")}" placeholder="Wie geeft de aantallen door? (functie, geen naam)" aria-label="Aantallen ${esc(a.naam)}"${dis()} style="flex:1 1 14rem">
       </div>
       <div class="open-dagen hint" data-open="${esc(a.id)}"><span>Open op</span>${DAGEN.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${openDagen(a).includes(i + 1) ? " checked" : ""}${dis()}><span>${d.slice(0, 2)}</span></label>`).join("")}<label>en de laatste<select data-laatste="${esc(a.id)}"${dis()}><option value="">–</option>${DAGEN.map((d, i) => `<option value="${i + 1}"${laatsteDag(a) === i + 1 ? " selected" : ""}>${d}</option>`).join("")}</select>van de maand</label><span>${heeftDagen(a) ? "" : "(niets aangeduid = elke dag)"}</span></div>
@@ -1277,7 +1292,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030p";
+const APP_VERSIE = "20261030q";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
