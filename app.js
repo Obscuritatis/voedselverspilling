@@ -595,7 +595,7 @@ function renderOverzicht(main) {
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
       <div class="tablewrap"><table class="afd-tabel">
-        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten nu een standaardmaaltijd krijgen">Huidig standaard</th><th style="text-align:right" title="Bewoners of patiënten met een gemixte maaltijd of een dieet">Gemixt/diëten</th><th style="text-align:right" title="Standaard + gemixt/diëten">Huidige bezetting</th><th style="text-align:right">Verspilling</th><th style="width:18%"></th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoeligheden</th><th>Acties</th><th>Focus</th></tr></thead>
+        <thead><tr><th>Afdeling</th><th style="text-align:right">Max. bezetting</th><th style="text-align:right" title="Vul in hoeveel bewoners of patiënten nu een standaardmaaltijd krijgen">Huidig standaard</th><th style="text-align:right" title="Bewoners of patiënten met een gemixte maaltijd of een dieet">Gemixt/<wbr>diëten</th><th style="text-align:right" title="Standaard + gemixt/diëten">Huidige bezetting</th><th style="text-align:right">Verspilling</th><th style="text-align:right" title="Verspilling per aanwezige bewoner of patiënt (of per plaats per meetdag als er geen aanwezigen zijn ingevuld)">Per aanwezige</th><th>Gevoelig&shy;heden</th><th>Acties</th><th>Focus</th></tr></thead>
         <tbody>${afd.map((a) => { const k = sum(ofAfd(ms, a.id)); const g = ofAfd(gev, a.id); const ac = ofAfd(act, a.id); return `
           <tr class="click" data-open="${esc(a.id)}" tabindex="0">
             <td><div class="afd-cel"><i class="ndot d-${focusInfo(a)[0]}"></i><div><b>${esc(a.naam)}</b><br><span class="hint">${typeNaam(a.type)}</span></div></div></td>
@@ -603,13 +603,12 @@ function renderOverzicht(main) {
             <td class="num">${huidigVeld(a)}</td>
             <td class="num">${dieetVeld(a)}</td>
             <td class="num"><b>${totaalNu(a) ?? `<span class="hint">–</span>`}</b></td>
-            <td class="num">${kg(k)}</td>
-            <td><div class="bar"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
+            <td class="num">${kg(k)}<div class="bar" style="margin-top:6px"><i style="width:${(k / maxKg) * 100}%"></i></div></td>
             <td class="num">${(() => { const pa = perAanwezige(a.id, ofAfd(ms, a.id)); if (pa != null) return gram(pa); const g = gramPerPlaats(a, ofAfd(ms, a.id)); return g == null ? `<span class="hint">–</span>` : `<span class="hint" title="per bewoner per meetdag">${gram(g)}/bewoner</span>`; })()}</td>
             <td>${g.length ? `${g.length} <span class="hint">(${g.filter((x) => x.impact === "hoog").length} hoog)</span>` : `<span class="hint">geen</span>`}</td>
             <td class="nowrap">${ac.length ? `${ac.filter((x) => x.status !== "Afgerond").length} open, ${ac.filter((x) => x.status === "Afgerond").length} af` : `<span class="hint">geen</span>`}</td>
             <td class="focus">${focusFor(a)}</td>
-          </tr>`; }).join("") || `<tr><td colspan="11" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
+          </tr>`; }).join("") || `<tr><td colspan="10" class="hint">Nog geen afdelingen voor deze site.</td></tr>`}</tbody>
       </table></div>
     </section>
     <div class="two">
@@ -1294,7 +1293,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030r";
+const APP_VERSIE = "20261030s";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
