@@ -300,6 +300,14 @@ form.f .tegel:has(input:checked) { border-color: var(--sc); background: color-mi
 .open-dagen label:has(select) { white-space: nowrap; gap: 6px }
 .open-dagen select { width: auto; padding: 2px 8px; min-height: 0 }
 /* Menu van de maaltijd, bij het wegen */
+.samen-veld { display: grid; gap: 6px }
+.samen-lbl { font-weight: 600; font-size: .86rem }
+.samen-chips { display: flex; flex-wrap: wrap; gap: 6px }
+.samen-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line) }
+.samen-chip small { color: var(--muted) }
+.samen-chip button { padding: 2px 8px }
+.samen-rij { display: flex; gap: 8px } .samen-rij input { flex: 1 1 auto; min-width: 0 }
+label.menu-veld .hint { display: block; min-height: 1.35em; font-weight: 500 }
 .vergelijk { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line) }
 .vergelijk table { width: 100%; margin-top: 4px; font-size: .86rem }
 .vergelijk th, .vergelijk td { padding: 3px 4px; border: 0 }
@@ -399,7 +407,7 @@ td.nowrap { white-space: nowrap }
 
 <script src="vendor/supabase-2.116.0.js"></script>
 <!-- Versie in het adres, zodat een toestel nooit een oude app.js bij een nieuwe pagina gebruikt. -->
-<script src="config.js?v=20261030k"></script>
-<script src="app.js?v=20261030k"></script>
+<script src="config.js?v=20261030l"></script>
+<script src="app.js?v=20261030l"></script>
 </body>
 </html>

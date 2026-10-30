@@ -25,7 +25,7 @@ const ICON = {
 };
 const icon = (n, cls = "ic") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n] || ""}</svg>`;
 const kort = (k) => (STROMEN[k] || k).split(" (")[0];
-const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Samengesteld gerecht 2", "Gemixt (alles samen)", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
+const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Samengesteld gerecht 2", "Samengesteld gerecht 3", "Gemixt (alles samen)", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
 const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Tussendoortje", "Hele dag"];
 const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
 const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
@@ -152,7 +152,7 @@ const heeftDagen = (a) => openDagen(a).length > 0 || laatsteDag(a) != null;
 const openOp = (a, datum) => !heeftDagen(a) || openDagen(a).includes(isoDag(datum)) || (laatsteDag(a) === isoDag(datum) && isLaatste(datum));
 const openTekst = (a) => { const d = openDagen(a).map((x) => DAGEN[x - 1]); if (laatsteDag(a)) d.push(`de laatste ${DAGEN[laatsteDag(a) - 1]} van de maand`); return d.length > 1 ? d.slice(0, -1).join(", ") + " en " + d[d.length - 1] : d[0] || ""; };
 // Menu per site, dag en maaltijd: één gerecht per component, voor alle afdelingen van de site.
-const MENU_COMP = ["Soep", "Samengesteld gerecht", "Samengesteld gerecht 2", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert", "Brood en beleg"];
+const MENU_COMP = ["Soep", "Samengesteld gerecht", "Samengesteld gerecht 2", "Samengesteld gerecht 3", "Vlees, vis of vegetarisch", "Saus", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Dessert", "Brood en beleg"];
 const kortComp = (c) => c.split(/[,(]/)[0].trim();
 // Het centrale menu van de hoofdkeuken (zonder site) geldt overal; een gerecht dat voor een site apart ingevuld is, gaat voor.
 const menuVan = (siteId, datum, maaltijd) => {
@@ -174,12 +174,14 @@ const normVan = (p) => { if (!p) return null; const o = onderdelenVan(p); if (o.
 const ZETMEEL = "Zetmeel (aardappel, pasta, rijst)";
 const normProduct = (component, gerecht) => { if (component !== ZETMEEL) return S.producten.find((p) => p.component === component && p.naam === component) || null; const p = productVan(gerecht); return p && p.component === ZETMEEL ? p : null; };
 // Samengesteld gerecht (lasagne, stoemp …): één hoeveelheid per persoon; de onderdelen die het vervangt, tellen dan niet apart.
-const SAMEN = "Samengesteld gerecht", SAMEN2 = "Samengesteld gerecht 2";
+// Meerdere samengestelde gerechten per maaltijd: elk krijgt een eigen plaats (onderdeel) in het menu.
+const SAMEN = "Samengesteld gerecht", SAMEN_PLAATSEN = [SAMEN, "Samengesteld gerecht 2", "Samengesteld gerecht 3"];
+const isSamen = (c) => SAMEN_PLAATSEN.includes(c);
 const VERVANGBAAR = ["Vlees, vis of vegetarisch", "Saus", ZETMEEL, "Groenten"];
 const samenVan = (gerecht) => { const p = productVan(gerecht); return p && p.component === SAMEN ? p : null; };
 const vervangtVan = (p) => (Array.isArray(p?.vervangt) ? p.vervangt : []).filter((c) => VERVANGBAAR.includes(c));
 // Norm voor een menuregel: een samengesteld gerecht wint, in welk veld het ook staat.
-const menuProduct = (component, gerecht) => samenVan(gerecht) || (component === SAMEN || component === SAMEN2 ? null : normProduct(component, gerecht));
+const menuProduct = (component, gerecht) => samenVan(gerecht) || (isSamen(component) ? null : normProduct(component, gerecht));
 const normTekst = (p) => { const n = normVan(p); return n == null ? "" : `${Math.round(n)} ${p.eenheid === "ml" ? "ml" : "g"} per persoon`; };
 // Wat de keuken voorzag voor één maaltijd van een afdeling, naast wat er gewogen werd.
 // Het menu geldt (voorlopig) enkel voor standaardmaaltijden: gram per persoon × standaardporties.
@@ -206,7 +208,7 @@ function vergelijking(afdId, datum, maaltijd, ms) {
   });
   const somNorm = rijen.reduce((t, x) => t + (x.norm || 0), 0);
   const voorzien = somNorm ? (somNorm * standaard) / 1000 : null;
-  return { rijen, voorzien, gewogen: sum(gew), dieet, ontbreekt: rijen.filter((x) => x.norm == null).map((x) => (x.component === ZETMEEL || x.component === SAMEN || x.component === SAMEN2 ? x.gerecht : kortComp(x.component).toLowerCase())) };
+  return { rijen, voorzien, gewogen: sum(gew), dieet, ontbreekt: rijen.filter((x) => x.norm == null).map((x) => (x.component === ZETMEEL || isSamen(x.component) ? x.gerecht : kortComp(x.component).toLowerCase())) };
 }
 // Bewaart een menu voor één site, of centraal (siteId null). Een site bewaart enkel wat afwijkt van het centrale menu.
 function bewaarMenuRijen(siteId, datum, maaltijd, waarden, okMsg = "Menu bewaard") {
@@ -221,7 +223,24 @@ function bewaarMenuRijen(siteId, datum, maaltijd, waarden, okMsg = "Menu bewaard
   if (!ops.length) return Promise.resolve(true);
   return write(async () => (await Promise.all(ops.map((f) => f()))).find((x) => x.error) || { error: null }, okMsg);
 }
-const lijstVoor = (c) => (c === ZETMEEL ? ' list="dlProducten"' : c === SAMEN || c === SAMEN2 ? ' list="dlSamen"' : "");
+// Eén veld voor samengestelde gerechten: kies er één, voeg toe (meteen bewaard), en daarna eventueel een volgende.
+function samenBlok(menu) {
+  const lijst = SAMEN_PLAATSEN.map((c) => [c, menu.find((x) => x.component === c)?.gerecht || ""]).filter(([, g]) => g);
+  const info = (g) => { const p = samenVan(g); return !p ? "nog niet bij de samengestelde gerechten" : normTekst(p) || "nog geen gram per persoon"; };
+  return `<div class="full samen-veld"><span class="samen-lbl">Samengesteld gerecht</span>
+    ${lijst.length ? `<div class="samen-chips">${lijst.map(([c, g]) => `<span class="samen-chip"><b>${esc(g)}</b><small>${esc(info(g))}</small>${canWrite ? `<button type="button" class="ghost" data-samenweg="${esc(c)}" aria-label="Verwijder ${esc(g)}">✕</button>` : ""}</span>`).join("")}</div>` : ""}
+    ${lijst.length < SAMEN_PLAATSEN.length ? `<div class="samen-rij"><input data-samennieuw list="dlSamen" maxlength="200" placeholder="${lijst.length ? "Nog een samengesteld gerecht toevoegen" : "Kies een samengesteld gerecht"}"${dis()}><button type="button" data-samenadd${dis()}>Toevoegen</button></div>` : ""}</div>`;
+}
+const vrijePlaats = (menu) => SAMEN_PLAATSEN.find((c) => !menu.some((x) => x.component === c));
+function bindSamen(root, siteId, datum, maaltijd, menu) {
+  const inp = root.querySelector("[data-samennieuw]"), add = root.querySelector("[data-samenadd]");
+  const voegToe = () => { const g = inp.value.trim(), c = vrijePlaats(menu); if (g && c) bewaarMenuRijen(siteId, datum, maaltijd, { [c]: g }, `${g} toegevoegd`); };
+  if (add) { add.onclick = voegToe; inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); voegToe(); } }; }
+  root.querySelectorAll("[data-samenweg]").forEach((b) => (b.onclick = () => bewaarMenuRijen(siteId, datum, maaltijd, { [b.dataset.samenweg]: "" }, "Verwijderd")));
+}
+// Wat er nog in het toevoegveld staat, gaat mee met "Menu bewaren".
+const metNieuwSamen = (root, menu, waarden) => { const g = root.querySelector("[data-samennieuw]")?.value.trim(), c = vrijePlaats(menu); if (g && c) waarden[c] = g; return waarden; };
+const lijstVoor = (c) => (c === ZETMEEL ? ' list="dlProducten"' : isSamen(c) ? ' list="dlSamen"' : "");
 const productLijst = () => `<datalist id="dlSamen">${S.producten.filter((x) => x.component === SAMEN).sort((x, y) => x.naam.localeCompare(y.naam)).map((x) => `<option value="${esc(x.naam)}">`).join("")}</datalist><datalist id="dlProducten">${S.producten.filter((x) => x.component === ZETMEEL).sort((x, y) => x.naam.localeCompare(y.naam)).map((x) => `<option value="${esc(x.naam)}">`).join("")}</datalist>`;
 function vergelijkHtml(a, datum, maaltijd, ms) {
   const v = vergelijking(a.id, datum, maaltijd, ms);
@@ -370,7 +389,7 @@ function renderProductie(main, sites) {
   const afwijk = [...new Set(S.menus.filter((x) => x.siteId && x.datum === datum && x.maaltijd === maaltijd).map((x) => x.siteId))].map((id) => S.sites.find((x) => x.id === id)?.naam).filter(Boolean);
   const prods = S.producten.filter((x) => x.component === ZETMEEL).sort((x, y) => x.naam.localeCompare(y.naam));
   const samens = S.producten.filter((x) => x.component === SAMEN).sort((x, y) => x.naam.localeCompare(y.naam));
-  const normHint = (c, g) => { const p = menuProduct(c, g); return !g ? "" : !p ? (c === ZETMEEL ? "nog niet bij de zetmeelsoorten" : c === SAMEN || c === SAMEN2 ? "nog niet bij de samengestelde gerechten" : "nog geen gram per persoon") : (normTekst(p) || "nog geen gram per persoon") + (samenVan(g) && vervangtVan(p).length ? ` (vervangt ${vervangtVan(p).map((x) => kortComp(x).toLowerCase()).join(", ")})` : ""); };
+  const normHint = (c, g) => { const p = menuProduct(c, g); return !g ? "" : !p ? (c === ZETMEEL ? "nog niet bij de zetmeelsoorten" : isSamen(c) ? "nog niet bij de samengestelde gerechten" : "nog geen gram per persoon") : (normTekst(p) || "nog geen gram per persoon") + (samenVan(g) && vervangtVan(p).length ? ` (vervangt ${vervangtVan(p).map((x) => kortComp(x).toLowerCase()).join(", ")})` : ""); };
   main.innerHTML = `
     <button type="button" class="terug" data-naar="start">‹ Startscherm</button>
     <div><div class="eyebrow">Hoofdkeuken</div><h2>Productie</h2><p class="hint">Eén keuken kookt voor alle sites. Vul per onderdeel in hoeveel er per persoon klaargemaakt wordt; bij het wegen vergelijkt de app dat met wat terugkomt.</p></div>
@@ -380,13 +399,14 @@ function renderProductie(main, sites) {
         <label>Datum<input type="date" id="pDatum" value="${esc(datum)}"></label>
         <label>Maaltijd<select id="pMaaltijd">${opts(MAALTIJDEN, maaltijd)}</select></label>
         <label class="full">Voor<select id="pSite"><option value="">Alle sites (centraal menu)</option>${sites.map((st) => `<option value="${esc(st.id)}"${st.id === scope ? " selected" : ""}>Afwijkend voor ${esc(st.naam)}</option>`).join("")}</select></label>
-        ${MENU_COMP.map((c) => `<label>${esc(kortComp(c))}<input data-pmenu="${esc(c)}"${lijstVoor(c)} maxlength="200" value="${esc(van(c))}"><span class="hint" data-pnorm="${esc(c)}">${esc(normHint(c, van(c)))}</span></label>`).join("")}
+        ${samenBlok(menu)}
+        ${MENU_COMP.filter((c) => !isSamen(c)).map((c) => `<label class="menu-veld">${esc(kortComp(c))}<input data-pmenu="${esc(c)}"${lijstVoor(c)} maxlength="200" value="${esc(van(c))}"><span class="hint" data-pnorm="${esc(c)}">${esc(normHint(c, van(c)))}</span></label>`).join("")}
         <div class="full" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="submit" class="primary"${dis()}>Menu bewaren</button><span class="hint">${afwijk.length ? "Afwijkend menu op deze dag voor: " + esc(afwijk.join(", ")) + "." : scope ? "Wat gelijk is aan het centrale menu, wordt niet apart bewaard." : ""}</span></div>
       </form>${productLijst()}
     </section>
     <section class="panel" style="margin-top:24px">
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Gram per persoon per onderdeel</h3><p class="hint">Eén hoeveelheid per onderdeel, welk gerecht het ook is. Wordt bewaard zodra je het veld verlaat.</p></div></div>
-      <div class="onderdelen">${MENU_COMP.filter((c) => c !== ZETMEEL && c !== SAMEN && c !== SAMEN2).map((c) => { const p = normProduct(c); return `<label><span>${esc(kortComp(c) === "Vlees" ? "Vlees, vis of vegetarisch" : kortComp(c))}</span><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-ogram="${esc(c)}" value="${esc(p?.gram ?? "")}" aria-label="Per persoon ${esc(c)}"${dis()}><select data-oeenh="${esc(c)}" aria-label="Eenheid ${esc(c)}"${dis()}>${opts(["g", "ml"], p?.eenheid || (c === "Soep" ? "ml" : "g"))}</select></span></label>`; }).join("")}</div>
+      <div class="onderdelen">${MENU_COMP.filter((c) => c !== ZETMEEL && !isSamen(c)).map((c) => { const p = normProduct(c); return `<label><span>${esc(kortComp(c) === "Vlees" ? "Vlees, vis of vegetarisch" : kortComp(c))}</span><span class="per"><input type="number" min="0" step="1" inputmode="numeric" data-ogram="${esc(c)}" value="${esc(p?.gram ?? "")}" aria-label="Per persoon ${esc(c)}"${dis()}><select data-oeenh="${esc(c)}" aria-label="Eenheid ${esc(c)}"${dis()}>${opts(["g", "ml"], p?.eenheid || (c === "Soep" ? "ml" : "g"))}</select></span></label>`; }).join("")}</div>
     </section>
     <section class="panel" style="margin-top:24px">
       <div class="form-kop"><span class="kop-ic">${icon("weegschaal")}</span><div><h3>Zetmeel per soort</h3><p class="hint">Bij zetmeel verschilt de hoeveelheid per soort. In het menu kies je de soort uit deze lijst.</p></div></div>
@@ -422,11 +442,13 @@ function renderProductie(main, sites) {
   $("#pDatum").onchange = () => { ui.pDatum = $("#pDatum").value || today(); render(); };
   $("#pMaaltijd").onchange = () => { ui.pMaaltijd = $("#pMaaltijd").value; render(); };
   $("#pSite").onchange = () => { ui.pSite = $("#pSite").value; render(); };
+  bindSamen(main, scope || null, datum, maaltijd, menu);
   main.querySelectorAll("[data-pmenu]").forEach((i) => (i.oninput = () => (main.querySelector(`[data-pnorm="${CSS.escape(i.dataset.pmenu)}"]`).textContent = normHint(i.dataset.pmenu, i.value.trim()))));
   $("#pMenu").onsubmit = (e) => {
     e.preventDefault();
     const waarden = {};
     main.querySelectorAll("[data-pmenu]").forEach((i) => (waarden[i.dataset.pmenu] = i.value));
+    metNieuwSamen(main, menu, waarden);
     bewaarMenuRijen(scope || null, datum, maaltijd, waarden);
   };
   const upd = (id, v, msg) => write(() => sb.from("vv_producten").update(v).eq("id", id), msg);
@@ -648,14 +670,19 @@ function tabMetingen(body, a, ms, msP) {
   const site = S.sites.find((x) => x.id === a.siteId);
   const tekenMenu = () => {
     const menu = menuVan(a.siteId, $("#mDatum").value || today(), $("#mMaaltijd").value), van = (c) => menu.find((x) => x.component === c)?.gerecht || "";
-    body.querySelectorAll("[data-gerecht]").forEach((el) => (el.textContent = van(el.dataset.gerecht) ? " · " + van(el.dataset.gerecht) : ""));
+    body.querySelectorAll("[data-gerecht]").forEach((el) => {
+      const c = el.dataset.gerecht;
+      el.textContent = van(c) ? " · " + van(c) : "";
+      if (isSamen(c) && c !== SAMEN) el.closest("label").hidden = !van(c);
+    });
     const box = $("#mMenu");
     if (ui.menuOpen) {
       box.innerHTML = `<div class="menu-kop"><b>Menu van ${esc($("#mMaaltijd").value.toLowerCase())}</b><span class="hint">wat je hier wijzigt, geldt enkel voor ${esc(site?.naam || "deze site")}; het centrale menu pas je aan bij Productie</span></div>
-        <div class="menu-velden">${MENU_COMP.map((c) => `<label>${esc(kortComp(c))}<input data-menu="${esc(c)}"${lijstVoor(c)} maxlength="200" value="${esc(van(c))}"></label>`).join("")}</div>${productLijst()}
+        <div class="menu-velden">${samenBlok(menu)}${MENU_COMP.filter((c) => !isSamen(c)).map((c) => `<label>${esc(kortComp(c))}<input data-menu="${esc(c)}"${lijstVoor(c)} maxlength="200" value="${esc(van(c))}"></label>`).join("")}</div>${productLijst()}
         <div style="display:flex;gap:8px;margin-top:10px"><button type="button" id="mMenuBewaar"${dis()}>Menu bewaren</button><button type="button" class="ghost" id="mMenuSluit">Annuleren</button></div>`;
       $("#mMenuSluit").onclick = () => { ui.menuOpen = false; tekenMenu(); };
       $("#mMenuBewaar").onclick = bewaarMenu;
+      bindSamen(box, a.siteId, $("#mDatum").value || today(), $("#mMaaltijd").value, menu);
       box.querySelectorAll("[data-menu]").forEach((i) => (i.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); bewaarMenu(); } }));
     } else {
       box.innerHTML = `<div class="menu-kop"><b>Menu</b>${canWrite ? `<button type="button" class="ghost" id="mMenuOpen">${menu.length ? "Aanpassen" : "Menu invullen"}</button>` : ""}</div>
@@ -666,6 +693,7 @@ function tabMetingen(body, a, ms, msP) {
   const bewaarMenu = async () => {
     const waarden = {};
     $("#mMenu").querySelectorAll("[data-menu]").forEach((i) => (waarden[i.dataset.menu] = i.value));
+    metNieuwSamen($("#mMenu"), menuVan(a.siteId, $("#mDatum").value || today(), $("#mMaaltijd").value), waarden);
     ui.menuOpen = false;
     await bewaarMenuRijen(a.siteId, $("#mDatum").value || today(), $("#mMaaltijd").value, waarden);
     tekenMenu();
@@ -1213,7 +1241,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030k";
+const APP_VERSIE = "20261030l";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
