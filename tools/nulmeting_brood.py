@@ -13,7 +13,7 @@ AFD = eval(src[src.index("AFD = {") + 6: src.index("\n}\n", src.index("AFD = {")
 num = lambda v: v if isinstance(v, (int, float)) else None
 EERSTE, LAATSTE = datetime.date(2024, 10, 14), datetime.date(2024, 10, 20)
 site = lambda afd: next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis") if afd.startswith(s))
-kg = collections.defaultdict(float); gepr = collections.defaultdict(float); aanw = {}; prod = {}; onbekend = set()
+gewogen = set(); kg = collections.defaultdict(float); gepr = collections.defaultdict(float); aanw = {}; prod = {}; onbekend = set()
 for f in sorted(glob.glob(os.path.join(sys.argv[1], "*Invulformulier.xlsx"))):
     wb = openpyxl.load_workbook(f, data_only=True)
     datum = hdr = None
@@ -30,6 +30,8 @@ for f in sorted(glob.glob(os.path.join(sys.argv[1], "*Invulformulier.xlsx"))):
             if h.startswith("bordrest"): kg[(afd, datum, "bordrest", "Gemengd of onbekend")] += v
             elif "brood" in h or "beleg" in h or "charcuterie" in h: kg[(afd, datum, "overproductie", "Brood en beleg")] += v
             elif "dessert" in h: kg[(afd, datum, "overproductie", "Dessert")] += v
+        # 0 kg = geen resten die dag (Johan, 2/11/2026); een rij zonder enig gewicht = niet gewogen.
+        if any(num(r[j]) is not None for j, h in enumerate(hdr) if j > 1 and h): gewogen.add((afd, datum))
         n = num(r[1])
         if n: aanw[(afd, datum)] = aanw.get((afd, datum), 0) + int(n)
     datum = None
@@ -47,7 +49,6 @@ for f in sorted(glob.glob(os.path.join(sys.argv[1], "*Invulformulier.xlsx"))):
         n = num(r[11])
         if n and EERSTE <= datum <= LAATSTE: prod[(afd, datum)] = prod.get((afd, datum), 0) + int(n)
 # Klaargemaakt ontbreekt: aantal residenten van die dag (Johan, 2/11/2026).
-gewogen = {(a, d) for a, d, _, _ in kg}
 for k in gewogen:
     if k not in prod and k in aanw: prod[k] = aanw[k]
 q = lambda x: "'" + str(x).replace("'", "''") + "'"

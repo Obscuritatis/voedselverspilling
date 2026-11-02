@@ -459,10 +459,16 @@ function totaalHtml(sites) {
 // Jaarbasis per afdeling: gemiddeld per gewogen dag van die afdeling × het aantal dagen per jaar dat ze open is.
 // Zo tellen afdelingen die maar enkele dagen gemeten zijn (bv. verslavingszorg) of maar enkele dagen open zijn (bv. Het Prieeltje) correct mee.
 const openPerJaar = (() => { const c = new Map(); return (a) => { if (!c.has(a.id)) { let n = 0; for (let t = Date.UTC(2025, 0, 1); t < Date.UTC(2026, 0, 1); t += 864e5) if (openOp(a, new Date(t).toISOString().slice(0, 10))) n++; c.set(a.id, n); } return c.get(a.id); }; })();
+// Gewogen dagen: dagen met wegingen plus dagen met aanwezigen (0 kg = geen resten die dag).
+// Enkel in het weekend gewogen (2024: afdelingen die in de week in de cafetaria aten en in het weekend een kar kregen) = 104 dagen per jaar.
 function nulJaar(ms) {
-  const per = new Map();
-  ms.forEach((m) => { const k = m.afdelingId + "|" + m.maaltijd, x = per.get(k) || { afd: m.afdelingId, kg: 0, dagen: new Set() }; x.kg += Number(m.kg) || 0; x.dagen.add(m.datum); per.set(k, x); });
-  let t = 0; per.forEach((x) => { const a = S.afdelingen.find((y) => y.id === x.afd); t += (x.kg / x.dagen.size) * (a ? openPerJaar(a) : 365); });
+  const per = new Map(), vk = (afd, mt) => { const k = afd + "|" + mt; if (!per.has(k)) per.set(k, { afd, kg: 0, dagen: new Set() }); return per.get(k); };
+  ms.forEach((m) => { const x = vk(m.afdelingId, m.maaltijd); x.kg += Number(m.kg) || 0; x.dagen.add(m.datum); });
+  const ids = new Set(ms.map((m) => m.afdelingId));
+  (S.nulMaaltijden || []).forEach((t) => { if (t.aanwezig != null && ids.has(t.afdelingId) && per.has(t.afdelingId + "|" + t.maaltijd)) vk(t.afdelingId, t.maaltijd).dagen.add(t.datum); });
+  const weekend = (d) => [0, 6].includes(new Date(d + "T12:00:00").getDay());
+  let t = 0; per.forEach((x) => { const a = S.afdelingen.find((y) => y.id === x.afd), dagen = [...x.dagen];
+    t += (x.kg / dagen.length) * (dagen.every(weekend) ? 104 : a ? openPerJaar(a) : 365); });
   return t;
 }
 function nulTotaalHtml(sites) {
@@ -1420,7 +1426,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102g";
+const APP_VERSIE = "20261102h";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });

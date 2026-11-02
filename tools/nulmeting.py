@@ -67,8 +67,8 @@ for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
             elif k == "Gewicht bordrest (kg)" and num(v):
                 kg[(afd, datum, "bordrest", "Gemengd of onbekend")] += v
         n = num(rij.get("Aantal \nresidenten"))
-        gewogen = any(num(v) for k, v in rij.items() if k.startswith("Gewicht"))
-        # Enkel waar er die dag iets gewogen is: een rij met overal 0 kg telt als niet gewogen (zoals bij de broodmaaltijd).
+        # Gewogen = minstens één gewicht ingevuld; 0 kg betekent "geen resten" (Johan, 2/11/2026), een lege rij = niet gewogen.
+        gewogen = any(num(v) is not None for k, v in rij.items() if k.startswith("Gewicht"))
         if naam not in GEEN_AANTAL and gewogen: ruw_aanw[(naam, afd)][datum] = int(n) if n else None
 for blad in ("HuizeNazarethProductie", "PZ+SA-ProductieMaaltijd", "ParkPassionistenProdMaaltijden"):
     for datum, naam, rij in blokken(blad):
