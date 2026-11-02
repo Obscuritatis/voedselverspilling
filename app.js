@@ -403,6 +403,26 @@ function totaalHtml(sites) {
   </section>`;
 }
 
+// Totaalanalyse van de nulmeting (6-22 september 2024, middagmaal) over alle sites.
+function nulTotaalHtml(sites) {
+  const nm = S.nulMetingen || [], nt = S.nulMaaltijden || [], np = S.productie || [];
+  if (!nm.length) return "";
+  const nk = new Set(nm.map(maalKey)), pk = new Set(np.map(maalKey));
+  const pr = sum(np.filter((x) => nk.has(maalKey(x)))), vs = sum(nm.filter((x) => pk.has(maalKey(x))));
+  const g = gPerAanw(nm, nt), dagen = new Set(nm.map((m) => m.datum)).size;
+  const perSite = sites.map((st) => { const ids = new Set(S.afdelingen.filter((a) => a.siteId === st.id).map((a) => a.id)), m = nm.filter((x) => ids.has(x.afdelingId));
+    return [st.naam, sum(m), gPerAanw(m, nt.filter((x) => ids.has(x.afdelingId)))]; }).filter(([, v]) => v).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(0.1, ...perSite.map(([, v]) => v));
+  return `<section class="totaal nul-totaal">
+    <div class="totaal-kop"><div class="eyebrow">Nulmeting september 2024 · alle sites</div></div>
+    <div class="totaal-grid">
+      <div class="totaal-cijfer"><b>${kg(sum(nm))}</b><span>verspild bij het middagmaal, ${dagen} meetdagen (6 tot 22 september 2024)</span>
+        <div class="totaal-mini"><span><b>${g == null ? "–" : gram(g)}</b>per aanwezige</span><span><b>${pr ? Math.round((vs / pr) * 100) + " %" : "–"}</b>van de productie</span><span><b>${kg(sum(nm.filter((m) => m.stroom === "overproductie")))}</b>overproductie</span><span><b>${kg(sum(nm.filter((m) => m.stroom === "bordrest")))}</b>bordresten</span></div></div>
+      <div class="totaal-sites">${perSite.map(([n, v, gp]) => `<div class="b"><span class="lbl">${esc(n)}</span><span class="num">${kg(v)}${gp == null ? "" : ` · ${gram(gp)} p.p.`}</span><div class="bar"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></div></div>`).join("")}</div>
+    </div>
+  </section>`;
+}
+
 // Beginscherm: de app opent altijd hier, met een tegel per site (naam en afdelingen per soort).
 function renderStart(main, sites) {
   const u = new Date().getHours(), groet = u < 12 ? "Goedemorgen" : u < 18 ? "Goedemiddag" : "Goedenavond";
@@ -424,6 +444,7 @@ function renderStart(main, sites) {
         <span class="site-sub">Productie: menu en gram per persoon<br>voor alle sites</span>
         <span class="site-pijl">${icon("pijl")}</span>
       </button></div>
+    ${nulTotaalHtml(sites)}
     ${totaalHtml(sites)}`;
   main.querySelector("[data-productie]").onclick = () => { ui.view = "productie"; render(); window.scrollTo({ top: 0 }); };
   main.querySelectorAll("[data-jaar]").forEach((b) => (b.onclick = () => { ui.jaar = b.dataset.jaar; render(); }));
@@ -1331,7 +1352,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102b";
+const APP_VERSIE = "20261102c";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
