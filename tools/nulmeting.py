@@ -43,6 +43,7 @@ def blokken(naam):
             yield datum, str(r[hdr["Afdeling"]]).strip(), {k: r[j] for k, j in hdr.items()}
 
 site = lambda afd: afd.rsplit("-", 0)[0] and next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis") if afd.startswith(s))
+ruw_aanw = collections.defaultdict(dict); ruw_prod = collections.defaultdict(dict)
 kg = collections.defaultdict(float); gepr = collections.defaultdict(float); aanw = collections.defaultdict(int); prod = collections.defaultdict(int); onbekend = set()
 for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
     for datum, naam, rij in blokken(blad):
@@ -56,14 +57,30 @@ for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
             elif k == "Gewicht bordrest (kg)" and num(v):
                 kg[(afd, datum, "bordrest", "Gemengd of onbekend")] += v
         n = num(rij.get("Aantal \nresidenten"))
-        if n and naam not in GEEN_AANTAL: aanw[(afd, datum)] += int(n)
+        gewogen = any(num(v) for k, v in rij.items() if k.startswith("Gewicht"))
+        # Enkel aanvullen waar er die dag gewogen is; zonder wegingen (bv. dicht) blijft het aantal leeg.
+        if naam not in GEEN_AANTAL and (n or gewogen): ruw_aanw[(naam, afd)][datum] = int(n) if n else None
 for blad in ("HuizeNazarethProductie", "PZ+SA-ProductieMaaltijd", "ParkPassionistenProdMaaltijden"):
     for datum, naam, rij in blokken(blad):
         afd = AFD.get(naam); n = num(rij.get("Totaal personen afdeling"))
-        if afd and n and naam not in GEEN_AANTAL: prod[(afd, datum)] += int(n)
+        if afd and naam not in GEEN_AANTAL: ruw_prod[(naam, afd)][datum] = int(n) if n else None
         if afd:
             for k, v in rij.items():
                 if k.startswith("Gewicht TOTAAL") and num(v): gepr[(afd, datum, next(COMP[x] for x in COMP if x.split()[-1] in k))] += v
+# Ontbrekend aantal (leeg of 0): overnemen van de vorige dag van die afdeling waar het wel ingevuld is (Johan, 2/11/2026);
+# is er geen vorige dag, dan de eerstvolgende.
+aangevuld = 0
+def aanvullen(ruw, doel):
+    global aangevuld
+    for (naam, afd), dagen in ruw.items():
+        gekend = sorted((d, n) for d, n in dagen.items() if n)
+        for d, n in sorted(dagen.items()):
+            if not n:
+                vorige = [x for x in gekend if x[0] < d]
+                n = (vorige[-1] if vorige else gekend[0] if gekend else (None, None))[1]
+                if n and doel is aanw: aangevuld += 1
+            if n: doel[(afd, d)] += n
+aanvullen(ruw_aanw, aanw); aanvullen(ruw_prod, prod)
 q = lambda x: "'" + str(x).replace("'", "''") + "'"
 met = [f"  ({q(site(a))}, {q(a)}, {q(d)}, 'Middagmaal', {q(s)}, {q(c)}, {round(v, 3)}, {q(OPM)})" for (a, d, s, c), v in sorted(kg.items()) if round(v, 3) > 0]
 pr = [f"  ({q(site(a))}, {q(a)}, {q(d)}, 'Middagmaal', {q(c)}, {round(v, 3)}, {q(OPM)})" for (a, d, c), v in sorted(gepr.items()) if round(v, 3) > 0]
@@ -71,6 +88,7 @@ sleutels = sorted(set(aanw) | set(prod))
 maal = [f"  ({q(site(a))}, {q(a)}, {q(d)}, 'Middagmaal', {prod.get((a, d), 'null')}, {aanw.get((a, d), 'null')}, {q(OPM)})" for a, d in sleutels]
 open(sys.argv[2], "w").write(f"""-- Nulmeting 6 tot 22 september 2024 (warme maaltijd), geïmporteerd op 2/11/2026 met tools/nulmeting.py.
 -- Buffetrest = Overproductie per component, bordrest = Bordrest (Gemengd of onbekend), geproduceerde kg per component in vv_productie.
+-- Ontbrekende aantallen aanwezigen en klaargemaakt zijn overgenomen van de vorige dag van die afdeling.
 -- Opnieuw uitvoeren vervangt de vorige import.
 create table if not exists public.vv_productie (
   id uuid primary key default gen_random_uuid(),
@@ -100,4 +118,4 @@ insert into public.vv_productie (site_id, afdeling_id, datum, maaltijd, componen
 select s.naam as site, count(*) as wegingen, round(sum(m.kg), 1) as kg from public.vv_metingen m join public.vv_sites s on s.id = m.site_id
 where m.opmerking = {q(OPM)} group by s.naam order by s.naam;
 """)
-print(len(met), "wegingen,", len(pr), "productieregels,", len(maal), "maaltijden; niet ingelezen:", sorted(onbekend))
+print(aangevuld, "aantallen aanwezigen aangevuld;", len(met), "wegingen,", len(pr), "productieregels,", len(maal), "maaltijden; niet ingelezen:", sorted(onbekend))
