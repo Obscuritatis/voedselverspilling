@@ -52,7 +52,10 @@ def blokken(naam):
             yield datum, str(naam).strip(), {k: r[j] for k, j in hdr.items()}
         elif isinstance(a, str) and a.strip(): hdr = None
 
-site = lambda afd: afd.rsplit("-", 0)[0] and next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis") if afd.startswith(s))
+site = lambda afd: next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis", "dieetkeuken") if afd.startswith(s))
+# Diëten (rij "Dieet" in het productieblad PZ+SA): op naam bereid in de dieetkeuken, voor alle sites (Johan, 2/11/2026).
+# Eigen site Dieetkeuken met één afdeling; de resten zitten in de wegingen van de afdelingen waar gegeten werd.
+AFD["Dieet"] = "dieetkeuken-dieten"
 ruw_aanw = collections.defaultdict(dict); ruw_prod = collections.defaultdict(dict)
 kg = collections.defaultdict(float); gepr = collections.defaultdict(float); aanw = collections.defaultdict(int); prod = collections.defaultdict(int); onbekend = set()
 for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
@@ -73,7 +76,7 @@ for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
 for blad in ("HuizeNazarethProductie", "PZ+SA-ProductieMaaltijd", "ParkPassionistenProdMaaltijden"):
     for datum, naam, rij in blokken(blad):
         afd = AFD.get(naam); n = num(rij.get("Totaal personen afdeling"))
-        if not afd and naam != "Dieet": onbekend.add(naam)
+        if not afd: onbekend.add(naam)
         if afd and naam not in GEEN_AANTAL: ruw_prod[(naam, afd)][datum] = int(n) if n else None
         if afd:
             for k, v in rij.items():
@@ -115,6 +118,10 @@ create table if not exists public.vv_productie (
 alter table public.vv_productie enable row level security;
 drop policy if exists "vv_productie voor collega's" on public.vv_productie;
 create policy "vv_productie voor collega's" on public.vv_productie for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang());
+insert into public.vv_sites (id, naam, volgorde) values ('dieetkeuken', 'Dieetkeuken', 90) on conflict (id) do nothing;
+insert into public.vv_afdelingen (id, site_id, naam, type, volgorde, omschrijving) values
+  ('dieetkeuken-dieten', 'dieetkeuken', 'Diëten (alle sites)', 'andere', 1, 'Maaltijden op naam voor bewoners en patiënten met een aangepast dieet, voor alle sites bereid in de dieetkeuken. De resten zitten in de wegingen van de afdelingen waar gegeten wordt.')
+on conflict (id) do nothing;
 delete from public.vv_productie where opmerking = {q(OPM)} and maaltijd = 'Middagmaal';
 -- Niet ingelezen (geen afdeling in de app): {', '.join(sorted(onbekend)) or 'geen'}.
 delete from public.vv_metingen where opmerking = {q(OPM)} and maaltijd = 'Middagmaal';

@@ -28,6 +28,7 @@ const kort = (k) => (STROMEN[k] || k).split(" (")[0];
 const COMPONENTEN = ["Soep", "Zetmeel (aardappel, pasta, rijst)", "Groenten", "Vlees, vis of vegetarisch", "Saus", "Samengesteld gerecht", "Samengesteld gerecht 2", "Samengesteld gerecht 3", "Gemixt en diëten", "Dessert", "Brood en beleg", "Zuivel", "Fruit", "Gemengd of onbekend"];
 const MAALTIJDEN = ["Ontbijt", "Middagmaal", "Avondmaal", "Broodmaaltijd", "Tussendoortje", "Hele dag"];
 // Nulmeting 2024: periode per maaltijd. Broodmaaltijd = ontbijt en avond samen gewogen.
+const DIEETKEUKEN = "dieetkeuken";
 const NUL_PERIODES = { Middagmaal: "6 tot 22 september 2024", Broodmaaltijd: "14 tot 20 oktober 2024 (ontbijt en avond samen)" };
 const CATEGORIEEN = ["Zorgprofiel en dieet", "Textuur en slikken (IDDSI)", "Eetlust en gezondheid", "Smaak en gewoontes", "Porties en bestelling", "Timing en organisatie", "Personeel en communicatie", "Bezoekers en vraag", "Voedselveiligheid en regels"];
 const STATUS = ["Idee", "Gepland", "Lopend", "Afgerond"];
@@ -347,7 +348,8 @@ function nulPaneel(afdIds, maaltijd) {
   const um = van(S.metingen).filter(inPeriode), ut = van(S.maaltijden).filter(inPeriode);
   // Verspild tegenover geproduceerd. 2024: gewogen productie, enkel afdelingsdagen met productie en wegingen.
   // Nu: wat er volgens de normen bij Productie voorzien was voor de standaardmaaltijden (gewogen productie is er niet).
-  const np = van(S.productie), pk = new Set(np.map(maalKey)), nk = new Set(nm.map(maalKey)), sam = [...pk].filter((k) => nk.has(k));
+  // Gewogen afdelingsdagen: met wegingen of met aanwezigen (een dag met 0 kg is een dag zonder resten).
+  const np = van(S.productie), pk = new Set(np.map(maalKey)), nk = new Set([...nm.map(maalKey), ...nt.filter((x) => x.aanwezig != null).map(maalKey)]), sam = [...pk].filter((k) => nk.has(k));
   const pr24 = sum(np.filter((x) => sam.includes(maalKey(x)))), vs24 = sum(nm.filter((x) => sam.includes(maalKey(x))));
   const vgx = ut.map((x) => [x, vergelijking(x.afdelingId, x.datum, x.maaltijd, um)]).filter(([, v]) => v?.voorzien), vg = vgx.map(([, v]) => v), prNu = vg.reduce((t, v) => t + v.voorzien, 0), vsNu = vg.reduce((t, v) => t + v.gewogen, 0);
   const pct2 = (a, b) => (b ? `${Math.round((a / b) * 100)} %` : "–");
@@ -479,8 +481,11 @@ function nulTotaalHtml(sites) {
     const dagen = new Set(nm.map((m) => m.datum)).size;
     return { mt, nm, nt, dagen, perDag: dagen ? sum(nm) / dagen : 0, g: gPerAanw(nm, nt) }; }).filter((m) => m.nm.length);
   const jaar = nulJaar(alle), gDag = maal.some((m) => m.g != null) ? maal.reduce((t, m) => t + (m.g || 0), 0) : null;
-  const nk = new Set(alle.map(maalKey)), pk = new Set(np.map(maalKey));
-  const pr = sum(np.filter((x) => nk.has(maalKey(x)))), vs = sum(alle.filter((x) => pk.has(maalKey(x))));
+  // Productie tegenover verspilling over alle gewogen afdelingsdagen (ook dagen met 0 kg). De dieetkeuken bereidt voor alle sites:
+  // haar productie telt mee op de meetdagen, haar resten zitten in de wegingen van de afdelingen.
+  const nk = new Set([...alle.map(maalKey), ...allet.filter((x) => x.aanwezig != null).map(maalKey)]), pk = new Set(np.map(maalKey));
+  const meet = new Set(alle.map((x) => x.datum + "|" + x.maaltijd)), dieet = (x) => S.afdelingen.find((a) => a.id === x.afdelingId)?.siteId === DIEETKEUKEN;
+  const pr = sum(np.filter((x) => nk.has(maalKey(x)) || (dieet(x) && meet.has(x.datum + "|" + x.maaltijd)))), vs = sum(alle.filter((x) => pk.has(maalKey(x))));
   const perSite = sites.map((st) => { const ids = new Set(S.afdelingen.filter((a) => a.siteId === st.id).map((a) => a.id));
     const j = nulJaar(alle.filter((x) => ids.has(x.afdelingId)));
     return [st.naam, j, sum(alle.filter((x) => ids.has(x.afdelingId)))]; }).filter(([, j]) => j).sort((a, b) => b[1] - a[1]);
@@ -1433,7 +1438,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102i";
+const APP_VERSIE = "20261102j";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
