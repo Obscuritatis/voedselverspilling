@@ -23,9 +23,16 @@ AFD = {
   "Ter berken 1": "psychiatrisch-ziekenhuis-eetherstel-leefgroep-1", "Terberken 1": "psychiatrisch-ziekenhuis-eetherstel-leefgroep-1",
   "Ter berken 2": "psychiatrisch-ziekenhuis-eetherstel-leefgroep-1", "Ter berken 3": "psychiatrisch-ziekenhuis-eetherstel-leefgroep-1",
   "Terberken 3": "psychiatrisch-ziekenhuis-eetherstel-leefgroep-1", "Ter berken 4": "psychiatrisch-ziekenhuis-eetherstel-leefgroep-1",
+  # Volgens de namenlijst in het controledoc (stonden onder een notitie "50/50" en werden eerst niet ingelezen).
+  "Ter Dennen  OBS": "psychiatrisch-ziekenhuis-verslavingszorg-observatie", "Ter Dennen OBS": "psychiatrisch-ziekenhuis-verslavingszorg-observatie",
+  "D2B": "psychiatrisch-ziekenhuis-verslavingszorg-groep-2-b", "TD2AC-KW": "psychiatrisch-ziekenhuis-verslavingszorg-groep-2-ac-kw",
+  "Motivatie (L2)": "psychiatrisch-ziekenhuis-ap1-motivatiegroep", "Prisma 2A": "psychiatrisch-ziekenhuis-ap2-groep-a",
+  "Prima 2 B": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2", "Prisma 2 B": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2",
+  "Prisma 2 C1": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2", "Prisma 2 C2": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2",
+  "Cafetaria": "psychiatrisch-ziekenhuis-personeelsrestaurant",
 }
 # Aantallen die niet kloppen (Ter berken 4: 120 en 60 personen bij 0 kg bordrest) tellen niet mee.
-GEEN_AANTAL = {"Ter berken 4"}
+GEEN_AANTAL = {"Ter berken 4", "Cafetaria"}  # cafetaria: het aantal is niet het aantal eters (7 tot 18 personen bij tot 35 kg zetmeel)
 # Tikfouten: (blad, datum, afdeling, kolom) -> juiste waarde.
 FIX = {("Huize Nazareth", "2024-09-12", "Elisabeth 1", "Gewicht buffetrest zetmeel (kg)"): 1.48}
 COMP = {"eiwit": "Vlees, vis of vegetarisch", "zetmeel": "Zetmeel (aardappel, pasta, rijst)", "warme groenten": "Groenten",
@@ -38,9 +45,10 @@ def blokken(naam):
         a = r[0]
         if isinstance(a, datetime.datetime): datum = a.date().isoformat(); hdr = None; continue
         if "Afdeling" in r: hdr = {str(h).strip(): j for j, h in reversed(list(enumerate(r))) if h is not None}; hdr["Afdeling"] = r.index("Afdeling"); continue
-        if isinstance(a, str) and a.strip(): hdr = None; continue
+        # Een rij met een afdeling hoort bij de tabel, ook als er links een notitie staat (bv. "50/50" in PZ+SA).
         if hdr and r[hdr["Afdeling"]] not in (None, ""):
             yield datum, str(r[hdr["Afdeling"]]).strip(), {k: r[j] for k, j in hdr.items()}
+        elif isinstance(a, str) and a.strip(): hdr = None
 
 site = lambda afd: afd.rsplit("-", 0)[0] and next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis") if afd.startswith(s))
 ruw_aanw = collections.defaultdict(dict); ruw_prod = collections.defaultdict(dict)
