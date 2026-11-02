@@ -297,6 +297,25 @@ function gramPerPlaats(a, ms) {
 const gram = (g) => Math.round(g).toLocaleString("nl-BE") + " g";
 // Aantallen per maaltijd (geleverde porties, aanwezigen): één rij per afdeling, datum en maaltijd.
 const maalKey = (x) => `${x.afdelingId}|${x.datum}|${x.maaltijd}`;
+// ---------- vergelijking met de nulmeting (6-22 september 2024, enkel warme maaltijd) ----------
+const NULMETING = "Nulmeting 2024";
+// Gram per aanwezige over de maaltijden waarvoor de aanwezigen gekend zijn; stroom leeg = alles samen.
+function gPerAanw(ms, mt, stroom) {
+  const mm = mt.filter((x) => Number(x.aanwezig) > 0), keys = new Set(mm.map(maalKey)), n = mm.reduce((t, x) => t + Number(x.aanwezig), 0);
+  return n ? (sum(ms.filter((m) => keys.has(maalKey(m)) && (!stroom || m.stroom === stroom))) * 1000) / n : null;
+}
+function nulmetingHtml(afdIds) {
+  const ids = new Set(afdIds), van = (l) => (l || []).filter((x) => ids.has(x.afdelingId) && x.maaltijd === "Middagmaal");
+  const nm = van(S.nulMetingen), nt = van(S.nulMaaltijden);
+  if (!nm.length) return "";
+  const um = van(S.metingen).filter(inPeriode), ut = van(S.maaltijden).filter(inPeriode);
+  const rij = (label, stroom, cls = "") => { const a = gPerAanw(nm, nt, stroom), b = gPerAanw(um, ut, stroom), d = a && b != null ? (b - a) / a : null;
+    return `<tr class="${cls}"><td>${label}</td><td class="num">${a == null ? "–" : gram(a)}</td><td class="num">${b == null ? "–" : gram(b)}</td><td class="num">${d == null ? "–" : `${d > 0 ? "+" : ""}${Math.round(d * 100)} %`}</td></tr>`; };
+  return `<section class="panel"><div class="row-head"><h3>Vergelijking met de nulmeting</h3><p class="hint">Gram per aanwezige, middagmaal. Nulmeting: 6 tot 22 september 2024.</p></div>
+    <div class="tablewrap"><table class="nul-tabel"><thead><tr><th></th><th style="text-align:right">Sept. 2024</th><th style="text-align:right">Nu (${ui.periode ? ui.periode + " dagen" : "alles"})</th><th style="text-align:right">Verschil</th></tr></thead><tbody>
+    ${rij("Overproductie", "overproductie")}${rij("Bordresten", "bordrest")}${rij("Totaal", "", "tot")}</tbody></table></div>
+    ${um.length ? "" : `<p class="hint" style="margin-top:8px">Nog geen wegingen van het middagmaal met aanwezigen in deze periode.</p>`}</section>`;
+}
 function aantallenVan(afdId) { return S.maaltijden.filter((x) => x.afdelingId === afdId && inPeriode(x)); }
 // Verspilling per aanwezige (gram), enkel over maaltijden waarvoor de aanwezigen ingevuld zijn.
 function perAanwezige(afdId, ms) {
@@ -594,6 +613,7 @@ function renderOverzicht(main) {
       ${stat("lamp", gev.length, `gevoeligheden, ${gev.filter((g) => g.impact === "hoog").length} hoog`, "t-amber")}
       ${stat("vlag", act.filter((a) => a.status === "Lopend" || a.status === "Gepland").length, "acties gepland of lopend", "t-green")}
     </div>
+    ${nulmetingHtml(afd.map((x) => x.id))}
     <section class="panel">
       <div class="row-head"><h3>Waar lokaal inzetten</h3><p class="hint">Klik op een afdeling om te meten en acties vast te leggen.</p></div>
       <div class="tablewrap"><table class="afd-tabel">
@@ -642,6 +662,7 @@ function renderAfdeling(main, a) {
       ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? [ps.porties != null ? ` · klaargemaakt voor ${ps.porties}` : "", ps.aanwezig != null ? `${ps.porties != null ? "," : " ·"} ${ps.aanwezig} aanwezigen` : ""].join("") : ", vul de aanwezigen in"; })()}`, "t-amber")}
       ${stat("vlag", act.filter((x) => x.status !== "Afgerond").length, `open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden`, "t-green")}
     </div>
+    ${nulmetingHtml([a.id])}
     <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${icon({ metingen: "weegschaal", gevoeligheden: "lamp", acties: "vlag" }[k])}${l}</button>`).join("")}</div>
     <div id="tabbody"></div>`;
   bindPeriode(main); bindHuidig(main);
@@ -1231,6 +1252,9 @@ async function laadAlles() {
   if (res.some((r) => r.error)) { banner("De gegevens konden niet geladen worden. Heb je toegang gekregen? Vraag het aan de beheerder."); return; }
   banner(ontbreekt.length ? `${ontbreekt.map((k) => OPTIONEEL[k][0]).join(" en ")} kunnen nog niet bewaard worden: voer eerst ${ontbreekt.map((k) => OPTIONEEL[k][1]).join(" en ")} uit in Supabase.` : "");
   keys.forEach((k, i) => (S[k] = (res[i].data || []).map(vanDb).map((r) => (r.kg != null ? { ...r, kg: Number(r.kg) } : r))));
+  // De nulmeting van 2024 staat apart: ze telt niet mee in de gewone cijfers, enkel in de vergelijking.
+  S.nulMetingen = S.metingen.filter((x) => x.opmerking === NULMETING); S.metingen = S.metingen.filter((x) => x.opmerking !== NULMETING);
+  S.nulMaaltijden = S.maaltijden.filter((x) => x.opmerking === NULMETING); S.maaltijden = S.maaltijden.filter((x) => x.opmerking !== NULMETING);
   ready = true;
   renderSafe();
 }
@@ -1297,7 +1321,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261030v";
+const APP_VERSIE = "20261102a";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
