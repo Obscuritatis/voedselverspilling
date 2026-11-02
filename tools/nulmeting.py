@@ -112,10 +112,10 @@ create table if not exists public.vv_productie (
 alter table public.vv_productie enable row level security;
 drop policy if exists "vv_productie voor collega's" on public.vv_productie;
 create policy "vv_productie voor collega's" on public.vv_productie for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang());
-delete from public.vv_productie where opmerking = {q(OPM)};
+delete from public.vv_productie where opmerking = {q(OPM)} and maaltijd = 'Middagmaal';
 -- Niet ingelezen (geen afdeling in de app): {', '.join(sorted(onbekend)) or 'geen'}.
-delete from public.vv_metingen where opmerking = {q(OPM)};
-delete from public.vv_maaltijden where opmerking = {q(OPM)};
+delete from public.vv_metingen where opmerking = {q(OPM)} and maaltijd = 'Middagmaal';
+delete from public.vv_maaltijden where opmerking = {q(OPM)} and maaltijd = 'Middagmaal';
 insert into public.vv_metingen (site_id, afdeling_id, datum, maaltijd, stroom, component, kg, opmerking) values
 {(','+chr(10)).join(met)};
 insert into public.vv_maaltijden (site_id, afdeling_id, datum, maaltijd, porties, aanwezig, opmerking) values

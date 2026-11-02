@@ -16,10 +16,10 @@ create table if not exists public.vv_productie (
 alter table public.vv_productie enable row level security;
 drop policy if exists "vv_productie voor collega's" on public.vv_productie;
 create policy "vv_productie voor collega's" on public.vv_productie for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang());
-delete from public.vv_productie where opmerking = 'Nulmeting 2024';
+delete from public.vv_productie where opmerking = 'Nulmeting 2024' and maaltijd = 'Middagmaal';
 -- Niet ingelezen (geen afdeling in de app): geen.
-delete from public.vv_metingen where opmerking = 'Nulmeting 2024';
-delete from public.vv_maaltijden where opmerking = 'Nulmeting 2024';
+delete from public.vv_metingen where opmerking = 'Nulmeting 2024' and maaltijd = 'Middagmaal';
+delete from public.vv_maaltijden where opmerking = 'Nulmeting 2024' and maaltijd = 'Middagmaal';
 insert into public.vv_metingen (site_id, afdeling_id, datum, maaltijd, stroom, component, kg, opmerking) values
   ('psychiatrisch-ziekenhuis', 'psychiatrisch-ziekenhuis-ap1-living-1', '2024-09-06', 'Middagmaal', 'bordrest', 'Gemengd of onbekend', 0.445, 'Nulmeting 2024'),
   ('psychiatrisch-ziekenhuis', 'psychiatrisch-ziekenhuis-ap1-living-1', '2024-09-06', 'Middagmaal', 'overproductie', 'Saus', 0.495, 'Nulmeting 2024'),
