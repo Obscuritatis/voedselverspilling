@@ -456,7 +456,15 @@ function totaalHtml(sites) {
 }
 
 // Totaalanalyse van de nulmeting 2024 over alle sites: middagmaal (sept.) en broodmaaltijd (okt.), elk met eigen meetdagen.
-// Jaarbasis: per maaltijd het gemiddelde per meetdag × 365, daarna opgeteld.
+// Jaarbasis per afdeling: gemiddeld per gewogen dag van die afdeling × het aantal dagen per jaar dat ze open is.
+// Zo tellen afdelingen die maar enkele dagen gemeten zijn (bv. verslavingszorg) of maar enkele dagen open zijn (bv. Het Prieeltje) correct mee.
+const openPerJaar = (() => { const c = new Map(); return (a) => { if (!c.has(a.id)) { let n = 0; for (let t = Date.UTC(2025, 0, 1); t < Date.UTC(2026, 0, 1); t += 864e5) if (openOp(a, new Date(t).toISOString().slice(0, 10))) n++; c.set(a.id, n); } return c.get(a.id); }; })();
+function nulJaar(ms) {
+  const per = new Map();
+  ms.forEach((m) => { const k = m.afdelingId + "|" + m.maaltijd, x = per.get(k) || { afd: m.afdelingId, kg: 0, dagen: new Set() }; x.kg += Number(m.kg) || 0; x.dagen.add(m.datum); per.set(k, x); });
+  let t = 0; per.forEach((x) => { const a = S.afdelingen.find((y) => y.id === x.afd); t += (x.kg / x.dagen.size) * (a ? openPerJaar(a) : 365); });
+  return t;
+}
 function nulTotaalHtml(sites) {
   const alle = S.nulMetingen || [], allet = S.nulMaaltijden || [], np = S.productie || [];
   if (!alle.length) return "";
@@ -464,17 +472,17 @@ function nulTotaalHtml(sites) {
   const maal = Object.keys(NUL_PERIODES).map((mt) => { const nm = alle.filter((x) => x.maaltijd === mt), nt = allet.filter((x) => x.maaltijd === mt);
     const dagen = new Set(nm.map((m) => m.datum)).size;
     return { mt, nm, nt, dagen, perDag: dagen ? sum(nm) / dagen : 0, g: gPerAanw(nm, nt) }; }).filter((m) => m.nm.length);
-  const jaar = maal.reduce((t, m) => t + m.perDag * 365, 0), gDag = maal.some((m) => m.g != null) ? maal.reduce((t, m) => t + (m.g || 0), 0) : null;
+  const jaar = nulJaar(alle), gDag = maal.some((m) => m.g != null) ? maal.reduce((t, m) => t + (m.g || 0), 0) : null;
   const nk = new Set(alle.map(maalKey)), pk = new Set(np.map(maalKey));
   const pr = sum(np.filter((x) => nk.has(maalKey(x)))), vs = sum(alle.filter((x) => pk.has(maalKey(x))));
   const perSite = sites.map((st) => { const ids = new Set(S.afdelingen.filter((a) => a.siteId === st.id).map((a) => a.id));
-    const j = maal.reduce((t, m) => t + (m.dagen ? (sum(m.nm.filter((x) => ids.has(x.afdelingId))) / m.dagen) * 365 : 0), 0);
+    const j = nulJaar(alle.filter((x) => ids.has(x.afdelingId)));
     return [st.naam, j, sum(alle.filter((x) => ids.has(x.afdelingId)))]; }).filter(([, j]) => j).sort((a, b) => b[1] - a[1]);
   const max = Math.max(0.1, ...perSite.map(([, v]) => v));
   return `<section class="totaal nul-totaal">
     <div class="totaal-kop"><div class="eyebrow">Nulmeting 2024 · alle sites</div></div>
     <div class="totaal-grid">
-      <div class="totaal-cijfer"><b>≈ ${jaarTekst(jaar)}</b><span>verspild op jaarbasis (${maal.map((m) => m.mt.toLowerCase()).join(" en ")}, gemiddelde per meetdag × 365)</span>
+      <div class="totaal-cijfer"><b>≈ ${jaarTekst(jaar)}</b><span>verspild op jaarbasis (${maal.map((m) => m.mt.toLowerCase()).join(" en ")}; per afdeling het gemiddelde per gewogen dag × de dagen per jaar dat ze open is)</span>
         <div class="totaal-mini">${maal.map((m) => `<span><b>${Math.round(m.perDag).toLocaleString("nl-BE")} kg</b>per dag ${m.mt.toLowerCase()}<br>${kg(sum(m.nm))} op ${m.dagen} dagen (${NUL_PERIODES[m.mt].split(" (")[0]})</span>`).join("")}
           <span><b>${gDag == null ? "–" : gram(gDag)}</b>per aanwezige per dag</span><span><b>${pr ? Math.round((vs / pr) * 100) + " %" : "–"}</b>van de productie</span></div></div>
       <div class="totaal-sites">${perSite.map(([n, j, v]) => `<div class="b"><span class="lbl">${esc(n)}</span><span class="num">≈ ${jaarTekst(j)}/jaar · ${kg(v)} gemeten</span><div class="bar"><i style="width:${Math.max(2, (j / max) * 100)}%"></i></div></div>`).join("")}</div>
@@ -1412,7 +1420,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102f";
+const APP_VERSIE = "20261102g";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });

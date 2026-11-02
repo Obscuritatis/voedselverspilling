@@ -29,7 +29,7 @@ AFD = {
   "Motivatie (L2)": "psychiatrisch-ziekenhuis-ap1-motivatiegroep", "Prisma 2A": "psychiatrisch-ziekenhuis-ap2-groep-a",
   "Prima 2 B": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2", "Prisma 2 B": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2",
   "Prisma 2 C1": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2", "Prisma 2 C2": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2",
-  "Cafetaria": "psychiatrisch-ziekenhuis-personeelsrestaurant",
+  "Cafetaria": "psychiatrisch-ziekenhuis-personeelsrestaurant", "Prisma 2": "psychiatrisch-ziekenhuis-ap2-groep-b-c1-c2",
 }
 # Aantallen die niet kloppen (Ter berken 4: 120 en 60 personen bij 0 kg bordrest) tellen niet mee.
 GEEN_AANTAL = {"Ter berken 4", "Cafetaria"}  # cafetaria: het aantal is niet het aantal eters (7 tot 18 personen bij tot 35 kg zetmeel)
@@ -44,10 +44,12 @@ def blokken(naam):
     for r in ws.iter_rows(max_col=25, values_only=True):
         a = r[0]
         if isinstance(a, datetime.datetime): datum = a.date().isoformat(); hdr = None; continue
-        if "Afdeling" in r: hdr = {str(h).strip(): j for j, h in reversed(list(enumerate(r))) if h is not None}; hdr["Afdeling"] = r.index("Afdeling"); continue
+        if "Afdeling" in r: hdr = {str(h).strip(): j for j, h in reversed(list(enumerate(r))) if h is not None}; acols = [j for j, h in enumerate(r) if h == "Afdeling"]; continue
         # Een rij met een afdeling hoort bij de tabel, ook als er links een notitie staat (bv. "50/50" in PZ+SA).
-        if hdr and r[hdr["Afdeling"]] not in (None, ""):
-            yield datum, str(r[hdr["Afdeling"]]).strip(), {k: r[j] for k, j in hdr.items()}
+        # Productiebladen hebben twee afdelingskolommen; sommige rijen (PZ+SA 21-22/09) staan enkel in de rechtse.
+        naam = next((r[j] for j in (acols if hdr else []) if r[j] not in (None, "")), None)
+        if naam is not None:
+            yield datum, str(naam).strip(), {k: r[j] for k, j in hdr.items()}
         elif isinstance(a, str) and a.strip(): hdr = None
 
 site = lambda afd: afd.rsplit("-", 0)[0] and next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis") if afd.startswith(s))
@@ -66,11 +68,12 @@ for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
                 kg[(afd, datum, "bordrest", "Gemengd of onbekend")] += v
         n = num(rij.get("Aantal \nresidenten"))
         gewogen = any(num(v) for k, v in rij.items() if k.startswith("Gewicht"))
-        # Enkel aanvullen waar er die dag gewogen is; zonder wegingen (bv. dicht) blijft het aantal leeg.
-        if naam not in GEEN_AANTAL and (n or gewogen): ruw_aanw[(naam, afd)][datum] = int(n) if n else None
+        # Enkel waar er die dag iets gewogen is: een rij met overal 0 kg telt als niet gewogen (zoals bij de broodmaaltijd).
+        if naam not in GEEN_AANTAL and gewogen: ruw_aanw[(naam, afd)][datum] = int(n) if n else None
 for blad in ("HuizeNazarethProductie", "PZ+SA-ProductieMaaltijd", "ParkPassionistenProdMaaltijden"):
     for datum, naam, rij in blokken(blad):
         afd = AFD.get(naam); n = num(rij.get("Totaal personen afdeling"))
+        if not afd and naam != "Dieet": onbekend.add(naam)
         if afd and naam not in GEEN_AANTAL: ruw_prod[(naam, afd)][datum] = int(n) if n else None
         if afd:
             for k, v in rij.items():
