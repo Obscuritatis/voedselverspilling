@@ -292,3 +292,19 @@ on conflict (id) do nothing;
 
 -- Wegingen tot 3 cijfers na de komma (30/10/2026).
 alter table public.vv_metingen alter column kg type numeric(9,3);
+
+-- Geproduceerde kg per afdeling, dag en component (nulmeting 2024; 2/11/2026).
+create table if not exists public.vv_productie (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  afdeling_id text not null references public.vv_afdelingen(id),
+  datum date not null,
+  maaltijd text not null default 'Middagmaal',
+  component text not null default '',
+  kg numeric(9,3) not null check (kg >= 0),
+  opmerking text not null default '',
+  aangemaakt timestamptz not null default now()
+);
+alter table public.vv_productie enable row level security;
+drop policy if exists "vv_productie voor collega's" on public.vv_productie;
+create policy "vv_productie voor collega's" on public.vv_productie for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang());

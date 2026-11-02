@@ -43,7 +43,7 @@ def blokken(naam):
             yield datum, str(r[hdr["Afdeling"]]).strip(), {k: r[j] for k, j in hdr.items()}
 
 site = lambda afd: afd.rsplit("-", 0)[0] and next(s for s in ("wzc-huize-nazareth", "wzc-sint-alexius", "wzc-passionisten", "psychiatrisch-ziekenhuis") if afd.startswith(s))
-kg = collections.defaultdict(float); aanw = collections.defaultdict(int); prod = collections.defaultdict(int); onbekend = set()
+kg = collections.defaultdict(float); gepr = collections.defaultdict(float); aanw = collections.defaultdict(int); prod = collections.defaultdict(int); onbekend = set()
 for blad in ("Huize Nazareth", "PZ+SA", "Park Passionisten"):
     for datum, naam, rij in blokken(blad):
         afd = AFD.get(naam)
@@ -61,12 +61,32 @@ for blad in ("HuizeNazarethProductie", "PZ+SA-ProductieMaaltijd", "ParkPassionis
     for datum, naam, rij in blokken(blad):
         afd = AFD.get(naam); n = num(rij.get("Totaal personen afdeling"))
         if afd and n and naam not in GEEN_AANTAL: prod[(afd, datum)] += int(n)
+        if afd:
+            for k, v in rij.items():
+                if k.startswith("Gewicht TOTAAL") and num(v): gepr[(afd, datum, next(COMP[x] for x in COMP if x.split()[-1] in k))] += v
 q = lambda x: "'" + str(x).replace("'", "''") + "'"
 met = [f"  ({q(site(a))}, {q(a)}, {q(d)}, 'Middagmaal', {q(s)}, {q(c)}, {round(v, 3)}, {q(OPM)})" for (a, d, s, c), v in sorted(kg.items()) if round(v, 3) > 0]
+pr = [f"  ({q(site(a))}, {q(a)}, {q(d)}, 'Middagmaal', {q(c)}, {round(v, 3)}, {q(OPM)})" for (a, d, c), v in sorted(gepr.items()) if round(v, 3) > 0]
 sleutels = sorted(set(aanw) | set(prod))
 maal = [f"  ({q(site(a))}, {q(a)}, {q(d)}, 'Middagmaal', {prod.get((a, d), 'null')}, {aanw.get((a, d), 'null')}, {q(OPM)})" for a, d in sleutels]
 open(sys.argv[2], "w").write(f"""-- Nulmeting 6 tot 22 september 2024 (warme maaltijd), geïmporteerd op 2/11/2026 met tools/nulmeting.py.
--- Buffetrest = Overproductie per component, bordrest = Bordrest (Gemengd of onbekend). Opnieuw uitvoeren vervangt de vorige import.
+-- Buffetrest = Overproductie per component, bordrest = Bordrest (Gemengd of onbekend), geproduceerde kg per component in vv_productie.
+-- Opnieuw uitvoeren vervangt de vorige import.
+create table if not exists public.vv_productie (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null references public.vv_sites(id),
+  afdeling_id text not null references public.vv_afdelingen(id),
+  datum date not null,
+  maaltijd text not null default 'Middagmaal',
+  component text not null default '',
+  kg numeric(9,3) not null check (kg >= 0),
+  opmerking text not null default '',
+  aangemaakt timestamptz not null default now()
+);
+alter table public.vv_productie enable row level security;
+drop policy if exists "vv_productie voor collega's" on public.vv_productie;
+create policy "vv_productie voor collega's" on public.vv_productie for all to authenticated using (public.heeft_toegang()) with check (public.heeft_toegang());
+delete from public.vv_productie where opmerking = {q(OPM)};
 -- Niet ingelezen (geen afdeling in de app): {', '.join(sorted(onbekend)) or 'geen'}.
 delete from public.vv_metingen where opmerking = {q(OPM)};
 delete from public.vv_maaltijden where opmerking = {q(OPM)};
@@ -75,7 +95,9 @@ insert into public.vv_metingen (site_id, afdeling_id, datum, maaltijd, stroom, c
 insert into public.vv_maaltijden (site_id, afdeling_id, datum, maaltijd, porties, aanwezig, opmerking) values
 {(','+chr(10)).join(maal)}
 on conflict (afdeling_id, datum, maaltijd) do update set porties = excluded.porties, aanwezig = excluded.aanwezig, opmerking = excluded.opmerking;
+insert into public.vv_productie (site_id, afdeling_id, datum, maaltijd, component, kg, opmerking) values
+{(','+chr(10)).join(pr)};
 select s.naam as site, count(*) as wegingen, round(sum(m.kg), 1) as kg from public.vv_metingen m join public.vv_sites s on s.id = m.site_id
 where m.opmerking = {q(OPM)} group by s.naam order by s.naam;
 """)
-print(len(met), "wegingen,", len(maal), "maaltijden; niet ingelezen:", sorted(onbekend))
+print(len(met), "wegingen,", len(pr), "productieregels,", len(maal), "maaltijden; niet ingelezen:", sorted(onbekend))

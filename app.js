@@ -309,11 +309,21 @@ function nulmetingHtml(afdIds) {
   const nm = van(S.nulMetingen), nt = van(S.nulMaaltijden);
   if (!nm.length) return "";
   const um = van(S.metingen).filter(inPeriode), ut = van(S.maaltijden).filter(inPeriode);
+  // Verspild tegenover geproduceerd. 2024: gewogen productie, enkel afdelingsdagen met productie en wegingen.
+  // Nu: wat er volgens de normen bij Productie voorzien was voor de standaardmaaltijden (gewogen productie is er niet).
+  const np = van(S.productie), pk = new Set(np.map(maalKey)), nk = new Set(nm.map(maalKey)), sam = [...pk].filter((k) => nk.has(k));
+  const pr24 = sum(np.filter((x) => sam.includes(maalKey(x)))), vs24 = sum(nm.filter((x) => sam.includes(maalKey(x))));
+  const vg = ut.map((x) => vergelijking(x.afdelingId, x.datum, x.maaltijd, um)).filter((v) => v?.voorzien), prNu = vg.reduce((t, v) => t + v.voorzien, 0), vsNu = vg.reduce((t, v) => t + v.gewogen, 0);
+  const pct2 = (a, b) => (b ? `${Math.round((a / b) * 100)} %` : "–");
+  const prodRijen = pr24 ? `<tr><td>Geproduceerd (kg)<br><span class="hint">nu: voorzien volgens de normen</span></td><td class="num">${kg(pr24)}</td><td class="num">${prNu ? kg(prNu) : "–"}</td><td></td></tr>
+    <tr><td>Verspild (kg)</td><td class="num">${kg(vs24)}</td><td class="num">${prNu ? kg(vsNu) : "–"}</td><td></td></tr>
+    <tr class="tot"><td>Verspild t.o.v. geproduceerd</td><td class="num">${pct2(vs24, pr24)}</td><td class="num">${prNu ? pct2(vsNu, prNu) : "–"}</td><td class="num">${prNu && pr24 ? `${Math.round((vsNu / prNu - vs24 / pr24) * 100) > 0 ? "+" : ""}${Math.round((vsNu / prNu - vs24 / pr24) * 100)} pp` : "–"}</td></tr>` : "";
   const rij = (label, stroom, cls = "") => { const a = gPerAanw(nm, nt, stroom), b = gPerAanw(um, ut, stroom), d = a && b != null ? (b - a) / a : null;
     return `<tr class="${cls}"><td>${label}</td><td class="num">${a == null ? "–" : gram(a)}</td><td class="num">${b == null ? "–" : gram(b)}</td><td class="num">${d == null ? "–" : `${d > 0 ? "+" : ""}${Math.round(d * 100)} %`}</td></tr>`; };
   return `<section class="panel"><div class="row-head"><h3>Vergelijking met de nulmeting</h3><p class="hint">Gram per aanwezige, middagmaal. Nulmeting: 6 tot 22 september 2024.</p></div>
     <div class="tablewrap"><table class="nul-tabel"><thead><tr><th></th><th style="text-align:right">Sept. 2024</th><th style="text-align:right">Nu (${ui.periode ? ui.periode + " dagen" : "alles"})</th><th style="text-align:right">Verschil</th></tr></thead><tbody>
-    ${rij("Overproductie", "overproductie")}${rij("Bordresten", "bordrest")}${rij("Totaal", "", "tot")}</tbody></table></div>
+    ${rij("Overproductie", "overproductie")}${rij("Bordresten", "bordrest")}${rij("Totaal", "", "tot")}</tbody>
+    ${prodRijen ? `<tbody class="nul-prod">${prodRijen}</tbody>` : ""}</table></div>
     ${um.length ? "" : `<p class="hint" style="margin-top:8px">Nog geen wegingen van het middagmaal met aanwezigen in deze periode.</p>`}</section>`;
 }
 function aantallenVan(afdId) { return S.maaltijden.filter((x) => x.afdelingId === afdId && inPeriode(x)); }
@@ -1228,7 +1238,7 @@ async function exporteerVerslag(afdId) {
 }
 
 // ---------- opslag ----------
-const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties", maaltijden: "vv_maaltijden", menus: "vv_menus", producten: "vv_producten" };
+const TABELLEN = { sites: "vv_sites", afdelingen: "vv_afdelingen", gevoeligheden: "vv_gevoeligheden", metingen: "vv_metingen", acties: "vv_acties", maaltijden: "vv_maaltijden", menus: "vv_menus", producten: "vv_producten", productie: "vv_productie" };
 // Database gebruikt snake_case (site_id), de app camelCase (siteId).
 const vanDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]));
 const naarDb = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase()), v]));
@@ -1242,7 +1252,7 @@ async function selectAlles(tabel) {
     if (data.length < 1000) return { data: uit, error: null };
   }
 }
-const OPTIONEEL = { maaltijden: ["Porties en aanwezigen", "supabase/2026-10-20-maaltijden.sql"], menus: ["Menu's", "supabase/2026-10-29-menu.sql"], producten: ["Producten van de hoofdkeuken", "supabase/2026-10-30-productie.sql"] };
+const OPTIONEEL = { maaltijden: ["Porties en aanwezigen", "supabase/2026-10-20-maaltijden.sql"], menus: ["Menu's", "supabase/2026-10-29-menu.sql"], producten: ["Producten van de hoofdkeuken", "supabase/2026-10-30-productie.sql"], productie: ["Geproduceerde kilo's van de nulmeting", "supabase/2026-11-02-nulmeting-2024.sql"] };
 async function laadAlles() {
   const keys = Object.keys(TABELLEN);
   const res = await Promise.all(keys.map((k) => selectAlles(TABELLEN[k])));
@@ -1321,7 +1331,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102a";
+const APP_VERSIE = "20261102b";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
