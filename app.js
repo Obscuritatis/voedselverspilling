@@ -427,6 +427,7 @@ function render() {
   if (!ready) { main.innerHTML = `<div class="empty">Gegevens laden…</div>`; return; }
   if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
   if (ui.view === "start") renderStart(main, sites);
+  else if (ui.site === DIEETKEUKEN && (ui.view === "kies" || ui.view === "overzicht")) metNul(() => renderDieet(main));
   else if (ui.view === "kies") renderKies(main);
   else if (ui.view === "overzicht") metNul(() => renderOverzicht(main));
   else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
@@ -706,6 +707,33 @@ function donutHtml(entries) {
 }
 const stat = (ic, waarde, label, cls = "") => `<div class="stat ${cls}"><span class="stat-ic">${icon(ic)}</span><div><b>${waarde}</b><span>${label}</span></div></div>`;
 
+// Dieetkeuken: bereidt op naam voor alle sites. Overzicht van alle afdelingen van alle sites met hun dieetporties en dieetresten.
+// Dieetresten weeg je op de afdeling zelf met onderdeel "Gemixt en diëten"; de dieetporties komen uit de aantallen (klaargemaakt dieet/gemixt).
+function renderDieet(main) {
+  const sites = S.sites.filter((x) => x.id !== DIEETKEUKEN), mt = S.maaltijden.filter(inPeriode), ms = S.metingen.filter((m) => inPeriode(m) && GEMIXT.includes(m.component));
+  const per = (a) => { const p = mt.filter((x) => x.afdelingId === a.id && Number(x.portiesDieet) > 0), k = ms.filter((m) => m.afdelingId === a.id);
+    const keys = new Set(p.map(maalKey)), kgMet = sum(k.filter((m) => keys.has(maalKey(m)))), n = p.reduce((t, x) => t + Number(x.portiesDieet), 0);
+    return { n, kg: sum(k), g: n ? (kgMet * 1000) / n : null }; };
+  const rijen = sites.map((st) => { const afd = S.afdelingen.filter((a) => a.siteId === st.id).sort((x, y) => (x.volgorde || 0) - (y.volgorde || 0)).map((a) => ({ a, ...per(a) }));
+    const n = afd.reduce((t, x) => t + x.n, 0), k = afd.reduce((t, x) => t + x.kg, 0);
+    return { st, afd, n, kg: k }; });
+  const totN = rijen.reduce((t, r) => t + r.n, 0), totKg = rijen.reduce((t, r) => t + r.kg, 0), maxKg = Math.max(0.1, ...rijen.flatMap((r) => r.afd.map((x) => x.kg)));
+  main.innerHTML = `
+    <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>Dieetkeuken</h2></div><div class="kop-acties">${periodeSeg()}</div></div>
+    <div class="stats">
+      ${stat("weegschaal", kg(totKg), `dieetresten ${periodeKort()}`, "hero")}
+      ${stat("kalender", totN, "dieetporties klaargemaakt", "t-blue")}
+      ${stat("lamp", totN ? gram((sum(ms.filter((m) => mt.some((x) => Number(x.portiesDieet) > 0 && maalKey(x) === maalKey(m)))) * 1000) / totN) : "–", "dieetresten per dieetportie", "t-amber")}
+    </div>
+    <section class="panel"><div class="row-head"><h3>Per site en afdeling</h3><p class="hint">Weeg de resten van diëten op de afdeling zelf, met onderdeel "Gemixt en diëten". Vul bij de aantallen in hoeveel porties dieet/gemixt er klaargemaakt zijn.</p></div>
+      <div class="tablewrap"><table class="dieet-tabel"><thead><tr><th>Afdeling</th><th style="text-align:right">Dieetporties</th><th style="text-align:right">Dieetresten</th><th style="text-align:right">Per dieetportie</th><th></th></tr></thead>
+      ${rijen.map((r) => `<tbody><tr class="tot"><td>${esc(r.st.naam)}</td><td class="num">${r.n || "–"}</td><td class="num">${kg(r.kg)}</td><td class="num"></td><td></td></tr>
+        ${r.afd.map((x) => `<tr><td>${esc(x.a.naam)}<div class="bar" style="margin-top:4px"><i style="width:${x.kg ? Math.max(2, (x.kg / maxKg) * 100) : 0}%"></i></div></td><td class="num">${x.n || "–"}</td><td class="num">${x.kg ? kg(x.kg) : "–"}</td><td class="num">${x.g == null ? "–" : gram(x.g)}</td>
+          <td style="text-align:right">${canWrite ? `<button type="button" class="ghost" data-dieet="${esc(x.a.id)}">Wegen</button>` : ""}</td></tr>`).join("")}</tbody>`).join("")}
+      </table></div></section>`;
+  bindPeriode(main);
+  main.querySelectorAll("[data-dieet]").forEach((b) => (b.onclick = () => { const a = S.afdelingen.find((y) => y.id === b.dataset.dieet); ui.site = a.siteId; ui.view = a.id; ui.tab = "metingen"; ui.mComp = GEMIXT[0]; saveUi(); render(); window.scrollTo({ top: 0 }); }));
+}
 function renderOverzicht(main) {
   const site = S.sites.find((s) => s.id === ui.site);
   const afd = siteAfd();
@@ -1438,7 +1466,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102j";
+const APP_VERSIE = "20261102k";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
