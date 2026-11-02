@@ -83,8 +83,8 @@ const SUG_ACT = [
 
 const S = { sites: [], afdelingen: [], gevoeligheden: [], metingen: [], acties: [], maaltijden: [], menus: [], producten: [], loaded: {} };
 let sb = null, sessie = null, ready = false, canWrite = true;
-const ui = { site: null, view: "start", tab: "metingen", periode: 30, prefillAct: null };
-try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode) ui.periode = s.periode; } catch (e) {}
+const ui = { site: null, view: "start", tab: "metingen", periode: 30, jaarKeuze: "", prefillAct: null };
+try { const s = JSON.parse(localStorage.getItem("voedselverspilling-ui") || "{}"); if (s.site) ui.site = s.site; if (s.periode > 0 || s.periode === 0) ui.periode = s.periode; if (s.jaarKeuze) ui.jaarKeuze = s.jaarKeuze; } catch (e) {}
 // De huidige pagina staat in het adres (#/site/pagina/tab): vernieuwen blijft op dezelfde pagina,
 // de knop terug werkt, en de app zelf opstarten (zonder #) begint op het beginscherm.
 // Enkel adressen die met "#/" beginnen zijn van ons; de aanmeldlink van Supabase gebruikt ook de #.
@@ -105,7 +105,7 @@ function schrijfAdres() {
   if (location.hash) history.pushState(null, "", h); else history.replaceState(null, "", h);
 }
 window.addEventListener("popstate", () => { if (leesAdres()) { ui.prefillAct = null; ui.wisAfd = null; render(); } });
-function saveUi() { try { localStorage.setItem("voedselverspilling-ui", JSON.stringify({ site: ui.site, periode: ui.periode })); } catch (e) {} }
+function saveUi() { try { localStorage.setItem("voedselverspilling-ui", JSON.stringify({ site: ui.site, periode: ui.periode, jaarKeuze: ui.jaarKeuze })); } catch (e) {} }
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -136,6 +136,7 @@ async function write(fn, okMsg) {
 
 // ---------- afgeleide cijfers ----------
 function inPeriode(m) {
+  if (ui.jaarKeuze) return isNul() || (m.datum || "").startsWith(ui.jaarKeuze);
   if (!ui.periode) return true;
   const grens = new Date(); grens.setDate(grens.getDate() - ui.periode);
   return m.datum >= grens.toISOString().slice(0, 10);
@@ -299,6 +300,16 @@ const gram = (g) => Math.round(g).toLocaleString("nl-BE") + " g";
 const maalKey = (x) => `${x.afdelingId}|${x.datum}|${x.maaltijd}`;
 // ---------- vergelijking met de nulmeting (6-22 september 2024, enkel warme maaltijd) ----------
 const NULMETING = "Nulmeting 2024";
+// Periodekeuze "Sept. 2024": site- en afdelingspagina's tonen dan de nulmeting in plaats van de gewone wegingen.
+// Jaarkeuze bovenaan: leeg = de gekozen periode; "2024" = de nulmeting; een ander jaar = alle wegingen van dat jaar.
+const NUL_JAAR = "2024", isNul = () => ui.jaarKeuze === NUL_JAAR;
+const periodeKort = () => (isNul() ? "in sept. 2024 (nulmeting)" : ui.jaarKeuze ? `in ${ui.jaarKeuze}` : ui.periode ? `in ${ui.periode} dagen` : "in totaal");
+function metNul(fn) {
+  if (!isNul()) return fn();
+  const m = S.metingen, t = S.maaltijden;
+  S.metingen = S.nulMetingen || []; S.maaltijden = S.nulMaaltijden || [];
+  try { return fn(); } finally { S.metingen = m; S.maaltijden = t; }
+}
 // Gram per aanwezige over de maaltijden waarvoor de aanwezigen gekend zijn; stroom leeg = alles samen.
 function gPerAanw(ms, mt, stroom) {
   const mm = mt.filter((x) => Number(x.aanwezig) > 0), keys = new Set(mm.map(maalKey)), n = mm.reduce((t, x) => t + Number(x.aanwezig), 0);
@@ -307,22 +318,30 @@ function gPerAanw(ms, mt, stroom) {
 function nulmetingHtml(afdIds) {
   const ids = new Set(afdIds), van = (l) => (l || []).filter((x) => ids.has(x.afdelingId) && x.maaltijd === "Middagmaal");
   const nm = van(S.nulMetingen), nt = van(S.nulMaaltijden);
-  if (!nm.length) return "";
+  if (!nm.length || isNul()) return "";
   const um = van(S.metingen).filter(inPeriode), ut = van(S.maaltijden).filter(inPeriode);
   // Verspild tegenover geproduceerd. 2024: gewogen productie, enkel afdelingsdagen met productie en wegingen.
   // Nu: wat er volgens de normen bij Productie voorzien was voor de standaardmaaltijden (gewogen productie is er niet).
   const np = van(S.productie), pk = new Set(np.map(maalKey)), nk = new Set(nm.map(maalKey)), sam = [...pk].filter((k) => nk.has(k));
   const pr24 = sum(np.filter((x) => sam.includes(maalKey(x)))), vs24 = sum(nm.filter((x) => sam.includes(maalKey(x))));
-  const vg = ut.map((x) => vergelijking(x.afdelingId, x.datum, x.maaltijd, um)).filter((v) => v?.voorzien), prNu = vg.reduce((t, v) => t + v.voorzien, 0), vsNu = vg.reduce((t, v) => t + v.gewogen, 0);
+  const vgx = ut.map((x) => [x, vergelijking(x.afdelingId, x.datum, x.maaltijd, um)]).filter(([, v]) => v?.voorzien), vg = vgx.map(([, v]) => v), prNu = vg.reduce((t, v) => t + v.voorzien, 0), vsNu = vg.reduce((t, v) => t + v.gewogen, 0);
   const pct2 = (a, b) => (b ? `${Math.round((a / b) * 100)} %` : "–");
-  const prodRijen = pr24 ? `<tr><td>Geproduceerd (kg)<br><span class="hint">nu: voorzien volgens de normen</span></td><td class="num">${kg(pr24)}</td><td class="num">${prNu ? kg(prNu) : "–"}</td><td></td></tr>
-    <tr><td>Verspild (kg)</td><td class="num">${kg(vs24)}</td><td class="num">${prNu ? kg(vsNu) : "–"}</td><td></td></tr>
+  // Kilo's altijd als gemiddelde per meetdag, zodat één testdag vergelijkbaar is met de 17 dagen van 2024.
+  const dagenVan = (keys) => new Set([...keys].map((k) => k.split("|")[1])).size || 1;
+  const d24 = dagenVan(sam), dNu = dagenVan(vgx.map(([x]) => maalKey(x)));
+  const dag = (v, d) => kg(v / d);
+  const perDag = (a, b) => (a && b != null ? `${b / a - 1 > 0 ? "+" : ""}${Math.round((b / a - 1) * 100)} %` : "–");
+  const vsDag24 = sum(nm) / dagenVan(nm.map(maalKey)), vsDagNu = um.length ? sum(um) / dagenVan(um.map(maalKey)) : null;
+  const dagRij = `<tr class="tot"><td>Verspild per meetdag (kg)<br><span class="hint">2024: ${dagenVan(nm.map(maalKey))} dagen · nu: ${um.length ? dagenVan(um.map(maalKey)) : 0} ${um.length && dagenVan(um.map(maalKey)) === 1 ? "dag" : "dagen"}</span></td><td class="num">${kg(vsDag24)}</td><td class="num">${vsDagNu == null ? "–" : kg(vsDagNu)}</td><td class="num">${perDag(vsDag24, vsDagNu)}</td></tr>`;
+  const prodRijen = pr24 ? `<tr><td>Geproduceerd per dag (kg)<br><span class="hint">nu: voorzien volgens de normen</span></td><td class="num">${dag(pr24, d24)}</td><td class="num">${prNu ? dag(prNu, dNu) : "–"}</td><td></td></tr>
+    <tr><td>Verspild per dag (kg)<br><span class="hint">dagen met gekende productie</span></td><td class="num">${dag(vs24, d24)}</td><td class="num">${prNu ? dag(vsNu, dNu) : "–"}</td><td></td></tr>
     <tr class="tot"><td>Verspild t.o.v. geproduceerd</td><td class="num">${pct2(vs24, pr24)}</td><td class="num">${prNu ? pct2(vsNu, prNu) : "–"}</td><td class="num">${prNu && pr24 ? `${Math.round((vsNu / prNu - vs24 / pr24) * 100) > 0 ? "+" : ""}${Math.round((vsNu / prNu - vs24 / pr24) * 100)} pp` : "–"}</td></tr>` : "";
   const rij = (label, stroom, cls = "") => { const a = gPerAanw(nm, nt, stroom), b = gPerAanw(um, ut, stroom), d = a && b != null ? (b - a) / a : null;
     return `<tr class="${cls}"><td>${label}</td><td class="num">${a == null ? "–" : gram(a)}</td><td class="num">${b == null ? "–" : gram(b)}</td><td class="num">${d == null ? "–" : `${d > 0 ? "+" : ""}${Math.round(d * 100)} %`}</td></tr>`; };
   return `<section class="panel"><div class="row-head"><h3>Vergelijking met de nulmeting</h3><p class="hint">Gram per aanwezige, middagmaal. Nulmeting: 6 tot 22 september 2024.</p></div>
-    <div class="tablewrap"><table class="nul-tabel"><thead><tr><th></th><th style="text-align:right">Sept. 2024</th><th style="text-align:right">Nu (${ui.periode ? ui.periode + " dagen" : "alles"})</th><th style="text-align:right">Verschil</th></tr></thead><tbody>
+    <div class="tablewrap"><table class="nul-tabel"><thead><tr><th></th><th style="text-align:right">Sept. 2024</th><th style="text-align:right">Nu (${ui.jaarKeuze || (ui.periode ? ui.periode + " dagen" : "alles")})</th><th style="text-align:right">Verschil</th></tr></thead><tbody>
     ${rij("Overproductie", "overproductie")}${rij("Bordresten", "bordrest")}${rij("Totaal", "", "tot")}</tbody>
+    <tbody class="nul-prod">${dagRij}</tbody>
     ${prodRijen ? `<tbody class="nul-prod">${prodRijen}</tbody>` : ""}</table></div>
     ${um.length ? "" : `<p class="hint" style="margin-top:8px">Nog geen wegingen van het middagmaal met aanwezigen in deze periode.</p>`}</section>`;
 }
@@ -365,7 +384,12 @@ function render() {
   if (sites.length && (!ui.site || !sites.some((s) => s.id === ui.site))) ui.site = sites[0].id;
   $("#siteWrap").hidden = !sessie || !sites.length;
   $("#siteSel").innerHTML = `<option value=""${ui.view === "start" || ui.view === "productie" ? " selected" : ""}>Alle sites</option>` + sites.map((s) => `<option value="${esc(s.id)}"${ui.view !== "start" && ui.view !== "productie" && s.id === ui.site ? " selected" : ""}>${esc(s.naam)}</option>`).join("");
-  renderNav();
+  const jaren = [...new Set(S.metingen.map((m) => (m.datum || "").slice(0, 4)).filter(Boolean))].filter((j) => j !== NUL_JAAR).sort().reverse();
+  if ((S.nulMetingen || []).length) jaren.push(NUL_JAAR);
+  if (ui.jaarKeuze && !jaren.includes(ui.jaarKeuze) && ready) ui.jaarKeuze = "";
+  $("#jaarWrap").hidden = !sessie || !jaren.length || ui.view === "start" || ui.view === "productie" || ui.view === "beheer";
+  $("#jaarSel").innerHTML = `<option value="">Periode (${ui.periode ? ui.periode + " dagen" : "alles"})</option>` + jaren.map((j) => `<option value="${j}"${j === ui.jaarKeuze ? " selected" : ""}>${j === NUL_JAAR ? "2024 · nulmeting" : j}</option>`).join("");
+  metNul(renderNav);
   const main = $("#main");
   document.body.classList.toggle("uit", !sessie);
   document.body.classList.toggle("start", !!sessie && ready && (ui.view === "start" || ui.view === "kies" || ui.view === "productie") && sites.length > 0);
@@ -374,10 +398,10 @@ function render() {
   if (!sites.length) { main.innerHTML = `<div class="empty">Nog geen site. Voeg er een toe via Beheer.</div>` + beheerHtml(); bindBeheer(); return; }
   if (ui.view === "start") renderStart(main, sites);
   else if (ui.view === "kies") renderKies(main);
-  else if (ui.view === "overzicht") renderOverzicht(main);
+  else if (ui.view === "overzicht") metNul(() => renderOverzicht(main));
   else if (ui.view === "beheer") { main.innerHTML = beheerHtml(); bindBeheer(); }
   else if (ui.view === "productie") renderProductie(main, sites);
-  else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) { ui.site = a.siteId; renderAfdeling(main, a); } else { ui.view = "overzicht"; renderOverzicht(main); } }
+  else { const a = S.afdelingen.find((x) => x.id === ui.view); if (a) { ui.site = a.siteId; metNul(() => renderAfdeling(main, a)); } else { ui.view = "overzicht"; renderOverzicht(main); } }
   schrijfAdres();
 }
 
@@ -411,14 +435,17 @@ function nulTotaalHtml(sites) {
   const pr = sum(np.filter((x) => nk.has(maalKey(x)))), vs = sum(nm.filter((x) => pk.has(maalKey(x))));
   const g = gPerAanw(nm, nt), dagen = new Set(nm.map((m) => m.datum)).size;
   const perSite = sites.map((st) => { const ids = new Set(S.afdelingen.filter((a) => a.siteId === st.id).map((a) => a.id)), m = nm.filter((x) => ids.has(x.afdelingId));
-    return [st.naam, sum(m), gPerAanw(m, nt.filter((x) => ids.has(x.afdelingId)))]; }).filter(([, v]) => v).sort((a, b) => b[1] - a[1]);
+    return [st.naam, sum(m), gPerAanw(m, nt.filter((x) => ids.has(x.afdelingId))), m.length ? (sum(m) / new Set(m.map((x) => x.datum)).size) * 365 : 0]; }).filter(([, v]) => v).sort((a, b) => b[1] - a[1]);
+  // Jaarbasis: gemiddelde per meetdag × 365 (alleen middagmaal, zoals gemeten).
+  const jaar = (sum(nm) / dagen) * 365, jaarTekst = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString("nl-BE", { maximumFractionDigits: 1 })} ton` : `${Math.round(v).toLocaleString("nl-BE")} kg`);
   const max = Math.max(0.1, ...perSite.map(([, v]) => v));
   return `<section class="totaal nul-totaal">
     <div class="totaal-kop"><div class="eyebrow">Nulmeting september 2024 · alle sites</div></div>
     <div class="totaal-grid">
       <div class="totaal-cijfer"><b>${kg(sum(nm))}</b><span>verspild bij het middagmaal, ${dagen} meetdagen (6 tot 22 september 2024)</span>
-        <div class="totaal-mini"><span><b>${g == null ? "–" : gram(g)}</b>per aanwezige</span><span><b>${pr ? Math.round((vs / pr) * 100) + " %" : "–"}</b>van de productie</span><span><b>${kg(sum(nm.filter((m) => m.stroom === "overproductie")))}</b>overproductie</span><span><b>${kg(sum(nm.filter((m) => m.stroom === "bordrest")))}</b>bordresten</span></div></div>
-      <div class="totaal-sites">${perSite.map(([n, v, gp]) => `<div class="b"><span class="lbl">${esc(n)}</span><span class="num">${kg(v)}${gp == null ? "" : ` · ${gram(gp)} p.p.`}</span><div class="bar"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></div></div>`).join("")}</div>
+        <div class="totaal-mini"><span><b>${g == null ? "–" : gram(g)}</b>per aanwezige</span><span><b>${pr ? Math.round((vs / pr) * 100) + " %" : "–"}</b>van de productie</span><span><b>${kg(sum(nm.filter((m) => m.stroom === "overproductie")))}</b>overproductie</span><span><b>${kg(sum(nm.filter((m) => m.stroom === "bordrest")))}</b>bordresten</span></div>
+        <div class="totaal-jaar"><b>≈ ${jaarTekst(jaar)}</b><span>op jaarbasis (gemiddeld ${Math.round(sum(nm) / dagen).toLocaleString("nl-BE")} kg per dag × 365, enkel middagmaal)</span></div></div>
+      <div class="totaal-sites">${perSite.map(([n, v, gp, j]) => `<div class="b"><span class="lbl">${esc(n)}</span><span class="num">${kg(v)}${gp == null ? "" : ` · ${gram(gp)} p.p.`} · ≈ ${jaarTekst(j)}/jaar</span><div class="bar"><i style="width:${Math.max(2, (v / max) * 100)}%"></i></div></div>`).join("")}</div>
     </div>
   </section>`;
 }
@@ -609,9 +636,9 @@ function renderNav() {
 }
 
 function periodeSeg() {
-  return `<div class="seg" role="group" aria-label="Periode">${[[7, "7 dagen"], [30, "30 dagen"], [90, "90 dagen"], [0, "Alles"]].map(([v, l]) => `<button data-per="${v}" aria-pressed="${ui.periode === v}">${l}</button>`).join("")}</div>`;
+  return `<div class="seg" role="group" aria-label="Periode">${[[7, "7 dagen"], [30, "30 dagen"], [90, "90 dagen"], [0, "Alles"]].map(([v, l]) => `<button data-per="${v}" aria-pressed="${!ui.jaarKeuze && ui.periode === v}"${ui.jaarKeuze ? " disabled" : ""}>${l}</button>`).join("")}</div>`;
 }
-function bindPeriode(root) { root.querySelectorAll("[data-excel]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await exporteerVerslag(b.dataset.excel === "site" ? null : b.dataset.excel); } finally { b.disabled = false; } })); root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
+function bindPeriode(root) { root.querySelectorAll("[data-excel]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { const id = b.dataset.excel === "site" ? null : b.dataset.excel; if (isNul()) { const m = S.metingen, t = S.maaltijden; S.metingen = S.nulMetingen; S.maaltijden = S.nulMaaltijden; try { await exporteerVerslag(id); } finally { S.metingen = m; S.maaltijden = t; } } else await exporteerVerslag(id); } finally { b.disabled = false; } })); root.querySelectorAll("[data-per]").forEach((b) => (b.onclick = () => { ui.periode = Number(b.dataset.per); saveUi(); render(); })); }
 
 function barsHtml(entries, labelMap) {
   if (!entries.length) return `<div class="leeg-mini">${icon("weegschaal")}<span>Nog geen wegingen in deze periode.</span></div>`;
@@ -639,7 +666,7 @@ function renderOverzicht(main) {
   main.innerHTML = `
     <div class="row-head"><div><div class="eyebrow">Overzicht</div><h2>${esc(site?.naam || "")}</h2></div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="site">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
-      ${stat("weegschaal", kg(sum(ms)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
+      ${stat("weegschaal", kg(sum(ms)), `verspild ${periodeKort()}`, "hero")}
       ${stat("kalender", ms.length, `wegingen op ${new Set(ms.map((m) => m.datum)).size} meetdagen`, "t-blue")}
       ${stat("lamp", gev.length, `gevoeligheden, ${gev.filter((g) => g.impact === "hoog").length} hoog`, "t-amber")}
       ${stat("vlag", act.filter((a) => a.status === "Lopend" || a.status === "Gepland").length, "acties gepland of lopend", "t-green")}
@@ -688,7 +715,7 @@ function renderAfdeling(main, a) {
   main.innerHTML = `
     <div class="row-head"><div><div class="eyebrow">${typeNaam(a.type)} · ${esc(S.sites.find((s) => s.id === a.siteId)?.naam || "")}</div><h2>${esc(a.naam)}</h2><div class="bezet-rij">${bezettingTekst(a) ? `<span class="hint">Maximale bezetting: <b>${esc(bezettingTekst(a))}</b></span>` : ""}<label class="hint">Huidig standaard ${huidigVeld(a)}</label><label class="hint">Gemixt/diëten ${dieetVeld(a)}</label>${totaalNu(a) != null ? `<span class="hint">Huidige bezetting: <b>${totaalNu(a)}</b></span>` : ""}${a.huidigeBezettingOp ? `<span class="hint">bijgewerkt ${esc(fmtDate(a.huidigeBezettingOp))}</span>` : ""}</div>${heeftDagen(a) ? `<p class="hint">Enkel open op ${esc(openTekst(a))}.</p>` : ""}${dagBezettingTekst(a) ? `<p class="hint">Bezetting per dag: ${esc(dagBezettingTekst(a))}.</p>` : ""}${a.aantallenInfo ? `<p class="hint">Aantallen: ${esc(a.aantallenInfo)}</p>` : ""}${a.omschrijving ? `<p class="hint">${esc(a.omschrijving)}</p>` : ""}</div><div class="kop-acties">${periodeSeg()}<button type="button" class="soft" data-excel="${esc(a.id)}">${icon("excel")}Excel-verslag</button></div></div>
     <div class="stats">
-      ${stat("weegschaal", kg(sum(msP)), `verspild in ${ui.periode ? ui.periode + " dagen" : "totaal"}`, "hero")}
+      ${stat("weegschaal", kg(sum(msP)), `verspild ${periodeKort()}`, "hero")}
       ${stat("kalender", msP.length ? kg(sum(msP) / new Set(msP.map((m) => m.datum)).size) : "–", `gemiddeld per meetdag${(() => { const g = gramPerPlaats(a, msP); return g == null ? "" : `, ${gram(g)} per bewoner`; })()}`, "t-blue")}
       ${stat("mensen", (() => { const pa = perAanwezige(a.id, msP); return pa == null ? "–" : gram(pa); })(), `per aanwezige${(() => { const ps = portiesSaldo(a.id); return ps ? [ps.porties != null ? ` · klaargemaakt voor ${ps.porties}` : "", ps.aanwezig != null ? `${ps.porties != null ? "," : " ·"} ${ps.aanwezig} aanwezigen` : ""].join("") : ", vul de aanwezigen in"; })()}`, "t-amber")}
       ${stat("vlag", act.filter((x) => x.status !== "Afgerond").length, `open acties, ${gev.filter((g) => g.impact === "hoog").length} hoge gevoeligheden`, "t-green")}
@@ -1018,6 +1045,7 @@ function bindBeheer() {
   bindDeletes(document);
 }
 
+$("#jaarSel").onchange = (e) => { ui.jaarKeuze = e.target.value; saveUi(); render(); };
 $("#siteSel").onchange = (e) => { if (e.target.value) { ui.site = e.target.value; ui.view = naSite(); saveUi(); } else ui.view = "start"; render(); window.scrollTo({ top: 0 }); };
 // Klik op het logo of de naam: terug naar het beginscherm.
 $("#home").onclick = () => { ui.view = "start"; ui.prefillAct = null; ui.wisAfd = null; render(); window.scrollTo({ top: 0 }); };
@@ -1144,7 +1172,7 @@ async function exporteerVerslag(afdId) {
   const gev = S.gevoeligheden.filter((g) => ids.has(g.afdelingId));
   const act = S.acties.filter((x) => ids.has(x.afdelingId));
   const onderwerp = afdId ? `${afd[0]?.naam || ""} (${site?.naam || ""})` : site?.naam || "";
-  const periodeTekst = ui.periode ? `Laatste ${ui.periode} dagen (vanaf ${fmtD(new Date(Date.now() - ui.periode * 864e5).toISOString())})` : "Alle metingen";
+  const periodeTekst = isNul() ? "Nulmeting 6 tot 22 september 2024 (middagmaal)" : ui.jaarKeuze ? `Jaar ${ui.jaarKeuze}` : ui.periode ? `Laatste ${ui.periode} dagen (vanaf ${fmtD(new Date(Date.now() - ui.periode * 864e5).toISOString())})` : "Alle metingen";
   const info = [["Site", site?.naam || ""], ...(afdId ? [["Afdeling", afd[0]?.naam || ""]] : []), ["Periode", periodeTekst], ["Geëxporteerd op", new Date().toLocaleString("nl-BE")]];
 
   const wb = new ExcelJS.Workbook();
@@ -1352,7 +1380,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102c";
+const APP_VERSIE = "20261102d";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
