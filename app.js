@@ -1161,7 +1161,7 @@ function rijHoogte(ws, rij, n) {
   for (let i = 1; i <= n; i++) {
     const v = rij.getCell(i).value, w = ws.getColumn(i).width || 10;
     if (v == null || v === "" || typeof v === "number" || rij.getCell(i).alignment?.wrapText === false) continue;
-    const r = String(v).split("\n").reduce((t, l) => t + Math.max(1, Math.ceil((l.length * 1.15) / w)), 0);
+    const r = String(v).split("\n").reduce((t, l) => t + Math.max(1, Math.ceil(l.length / (w * 1.1))), 0);
     regels = Math.max(regels, r);
   }
   return Math.min(120, 6 + regels * 15);
@@ -1265,13 +1265,20 @@ async function exporteerVerslag(afdId) {
   if (perAfd.length > 1) { const t = o.ws.getRow(rij); t.getCell(1).value = "Totaal"; t.getCell(4).value = afd.reduce((n, x) => n + (totaalNu(x) || 0), 0) || ""; t.getCell(9).value = afd.reduce((n, x) => n + (portiesSaldo(x.id)?.porties || 0), 0) || ""; t.getCell(10).value = afd.reduce((n, x) => n + (portiesSaldo(x.id)?.aanwezig || 0), 0) || ""; t.getCell(5).value = kgNum(totKg); t.getCell(5).numFmt = "0.0##"; t.getCell(6).value = ms.length; for (let c = 1; c <= afdKol.length; c++) { const cel = t.getCell(c); vul(cel, XL.tegel.groen[0]); cel.font = { bold: true, color: { argb: XL.donker } }; cel.border = { top: { style: "medium", color: { argb: XL.kop } } }; } rij++; }
   const verdeling = (titel, key, labels, lijst = ms) => {
     rij += 1; o.ws.getRow(rij).getCell(1).value = titel; o.ws.getRow(rij).getCell(1).font = { bold: true, size: 14, color: { argb: XL.donker } };
-    const g = groupKg(lijst, key), max = g.length ? g[0][1] : 1;
-    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : key === "gerecht" ? "Gerecht" : "Component"], ["kg", , "0.0##"], ["Aandeel", , "0%"], [""]], g.map(([k, v]) => [labels ? kort(k) : k, kgNum(v), totKg ? v / totKg : 0, "█".repeat(Math.max(1, Math.round((v / max) * 28)))]),
+    const g = groupKg(lijst, key), max = g.length ? g[0][1] : 1, kopRij = rij + 1;
+    rij = tabel(o.ws, rij + 1, [[key === "stroom" ? "Soort verlies" : key === "gerecht" ? "Gerecht" : "Component"], ["kg", , "0.0##"], ["Aandeel", , "0%"], [""]], g.map(([k, v]) => [labels ? kort(k) : k, kgNum(v), totKg ? v / totKg : 0, max ? v / max : 0]),
       (r, k) => {
+        // Balk als Excel-gegevensbalk in een samengevoegde cel (kolom D tot G), zodat hij binnen de tabel blijft.
         const kl = key === "stroom" ? XL.stroom[g[k][0]] : null, bar = r.getCell(4);
-        bar.font = { color: { argb: kl ? kl[1] : XL.kop } }; bar.alignment = { vertical: "middle", wrapText: false };
+        bar.numFmt = ";;;"; for (let i = 5; i <= 7; i++) { r.getCell(i).border = bar.border; if (bar.fill) r.getCell(i).fill = bar.fill; }
+        o.ws.mergeCells(r.number, 4, r.number, 7);
+        o.ws.addConditionalFormatting({ ref: `D${r.number}:G${r.number}`, rules: [{ type: "dataBar", minLength: 0, maxLength: 100, gradient: false, border: false, showValue: false,
+          cfvo: [{ type: "num", value: 0 }, { type: "num", value: 1 }], color: { argb: kl ? kl[1] : XL.kop } }] });
+        r.eachCell({ includeEmpty: true }, (c, nr) => { if (nr <= 4) c.alignment = { ...c.alignment, vertical: "middle" }; });
         if (kl) { vul(r.getCell(1), kl[0]); r.getCell(1).font = { bold: true, color: { argb: kl[1] } }; }
       });
+    const kc = o.ws.getRow(kopRij).getCell(4); for (let i = 5; i <= 7; i++) { o.ws.getRow(kopRij).getCell(i).fill = kc.fill; o.ws.getRow(kopRij).getCell(i).border = kc.border; }
+    o.ws.mergeCells(kopRij, 4, kopRij, 7);
   };
   verdeling("Per soort verlies", "stroom", STROMEN);
   verdeling("Per component", "component");
@@ -1426,7 +1433,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102h";
+const APP_VERSIE = "20261102i";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
