@@ -309,6 +309,9 @@ const NULMETING = "Nulmeting 2024";
 const NUL_JAAR = "2024", isNul = () => ui.jaarKeuze === NUL_JAAR;
 // Testmetingen: één meetdag op één site, in de lijst bovenaan te kiezen en te vergelijken met een gemiddelde dag van 2024.
 const TESTMETINGEN = [{ site: "wzc-huize-nazareth", datum: "2026-10-30" }];
+// Rij (weging of aantallen) die bij een testmeting hoort: telt niet mee in gewone overzichten die het onderscheid moeten maken.
+const afdSite = (id) => (S.afdelingen.find((a) => a.id === id) || {}).siteId;
+const isTestRij = (x) => TESTMETINGEN.some((t) => t.datum === x.datum && t.site === (x.siteId || afdSite(x.afdelingId)));
 const isTest = () => (ui.jaarKeuze || "").startsWith("test:"), testDatum = () => ui.jaarKeuze.slice(5);
 const periodeKort = () => (isNul() ? "in de nulmeting 2024" : isTest() ? `op de testmeting (${fmtD(testDatum())})` : ui.jaarKeuze ? `in ${ui.jaarKeuze}` : ui.periode ? `in ${ui.periode} dagen` : "in totaal");
 function metNul(fn) {
@@ -710,7 +713,11 @@ const stat = (ic, waarde, label, cls = "") => `<div class="stat ${cls}"><span cl
 // Dieetkeuken: bereidt op naam voor alle sites. Overzicht van alle afdelingen van alle sites met hun dieetporties en dieetresten.
 // Dieetresten weeg je op de afdeling zelf met onderdeel "Gemixt en diëten"; de dieetporties komen uit de aantallen (klaargemaakt dieet/gemixt).
 function renderDieet(main) {
-  const sites = S.sites.filter((x) => x.id !== DIEETKEUKEN), mt = S.maaltijden.filter(inPeriode), ms = S.metingen.filter((m) => inPeriode(m) && GEMIXT.includes(m.component));
+  const sites = S.sites.filter((x) => x.id !== DIEETKEUKEN), mt = S.maaltijden.filter((x) => inPeriode(x) && !isTestRij(x)), ms = S.metingen.filter((m) => inPeriode(m) && GEMIXT.includes(m.component) && !isTestRij(m));
+  // Testmetingen staan apart: ze tellen niet mee in de cijfers hierboven.
+  const testRijen = TESTMETINGEN.map((t) => { const k = S.metingen.filter((m) => m.datum === t.datum && GEMIXT.includes(m.component) && isTestRij(m)), p = S.maaltijden.filter((x) => x.datum === t.datum && isTestRij(x) && Number(x.portiesDieet) > 0);
+    const afd = [...new Set([...k, ...p].map((x) => x.afdelingId))].map((id) => ({ a: S.afdelingen.find((y) => y.id === id) || { naam: id }, kg: sum(k.filter((m) => m.afdelingId === id)), n: p.filter((x) => x.afdelingId === id).reduce((s, x) => s + Number(x.portiesDieet), 0) }));
+    return { t, afd, kg: sum(k) }; }).filter((r) => r.afd.length);
   const per = (a) => { const p = mt.filter((x) => x.afdelingId === a.id && Number(x.portiesDieet) > 0), k = ms.filter((m) => m.afdelingId === a.id);
     const keys = new Set(p.map(maalKey)), kgMet = sum(k.filter((m) => keys.has(maalKey(m)))), n = p.reduce((t, x) => t + Number(x.portiesDieet), 0);
     return { n, kg: sum(k), g: n ? (kgMet * 1000) / n : null }; };
@@ -730,7 +737,11 @@ function renderDieet(main) {
       ${rijen.map((r) => `<tbody><tr class="tot"><td>${esc(r.st.naam)}</td><td class="num">${r.n || "–"}</td><td class="num">${kg(r.kg)}</td><td class="num"></td><td></td></tr>
         ${r.afd.map((x) => `<tr><td>${esc(x.a.naam)}<div class="bar" style="margin-top:4px"><i style="width:${x.kg ? Math.max(2, (x.kg / maxKg) * 100) : 0}%"></i></div></td><td class="num">${x.n || "–"}</td><td class="num">${x.kg ? kg(x.kg) : "–"}</td><td class="num">${x.g == null ? "–" : gram(x.g)}</td>
           <td style="text-align:right">${canWrite ? `<button type="button" class="ghost" data-dieet="${esc(x.a.id)}">Wegen</button>` : ""}</td></tr>`).join("")}</tbody>`).join("")}
-      </table></div></section>`;
+      </table></div></section>
+    ${testRijen.map((r) => `<section class="panel"><div class="row-head"><h3>Testmeting ${esc((S.sites.find((x) => x.id === r.t.site) || { naam: r.t.site }).naam)}, ${fmtD(r.t.datum)}</h3><p class="hint">Dieetresten van deze testdag staan apart en tellen niet mee in de cijfers hierboven.</p></div>
+      <div class="tablewrap"><table class="dieet-tabel"><thead><tr><th>Afdeling</th><th style="text-align:right">Dieetporties</th><th style="text-align:right">Dieetresten</th></tr></thead><tbody>
+      ${r.afd.map((x) => `<tr><td>${esc(x.a.naam)}</td><td class="num">${x.n || "–"}</td><td class="num">${x.kg ? kg(x.kg) : "–"}</td></tr>`).join("")}
+      <tr class="tot"><td>Totaal testdag</td><td class="num">${r.afd.reduce((s, x) => s + x.n, 0) || "–"}</td><td class="num">${kg(r.kg)}</td></tr></tbody></table></div></section>`).join("")}`;
   bindPeriode(main);
   main.querySelectorAll("[data-dieet]").forEach((b) => (b.onclick = () => { const a = S.afdelingen.find((y) => y.id === b.dataset.dieet); ui.site = a.siteId; ui.view = a.id; ui.tab = "metingen"; ui.mComp = GEMIXT[0]; saveUi(); render(); window.scrollTo({ top: 0 }); }));
 }
@@ -1466,7 +1477,7 @@ render();
 })();
 // Altijd de laatste versie: bij openen en bij terugkeren naar de app kijken we in version.json
 // (nooit uit een cache) of er een nieuwere versie online staat, en laden we die dan één keer opnieuw.
-const APP_VERSIE = "20261102k";
+const APP_VERSIE = "20261103a";
 async function controleerVersie() {
   try {
     const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
